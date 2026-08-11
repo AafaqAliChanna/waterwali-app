@@ -1,8 +1,22 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Added for Phase A: network calls to the backend, and GPS for order placement -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+
     <application
         android:label="waterwali_app"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+
+        <!-- REQUIRED: paste your own Google Maps API key here, or the map
+             screen will show a blank grey box. Get one at
+             https://console.cloud.google.com/google/maps-apis (enable
+             "Maps SDK for Android"). -->
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="YOUR_GOOGLE_MAPS_API_KEY_HERE"/>
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
