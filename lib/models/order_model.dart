@@ -80,3 +80,22 @@ class Order {
     );
   }
 }
+
+// Converts the raw backend value (e.g. "SIZE_2000L") into a display label,
+// for screens that only have the String from an Order, not the enum.
+extension TankerSizeLabelX on String {
+  String get asTankerSizeLabel {
+    switch (this) {
+      case 'SIZE_1000L':
+        return '1000L';
+      case 'SIZE_2000L':
+        return '2000L';
+      case 'SIZE_3000L':
+        return '3000L';
+      case 'SIZE_5000L':
+        return '5000L';
+      default:
+        return this;
+    }
+  }
+}
