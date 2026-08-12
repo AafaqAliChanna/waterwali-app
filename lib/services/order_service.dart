@@ -4,9 +4,9 @@ import '../models/order_model.dart';
 import 'api_service.dart';
 
 class OrderService {
-  // Reuses the same base URL constant ApiService already defines, so there's
+  // Reuses the same base URL ApiService already defines, so there's
   // only one place to change it if the backend address ever moves.
-  static const String _baseUrl = ApiService.baseUrl;
+  static final String _baseUrl = ApiService.baseUrl;
 
   Future<Order> placeOrder({
     required String token,
@@ -49,6 +49,19 @@ class OrderService {
       return data.map((json) => Order.fromJson(json)).toList();
     } else {
       throw Exception('Could not load your orders.');
+    }
+  }
+
+  Future<Order> getOrder(String token, int orderId) async {
+    final url = Uri.parse('$_baseUrl/orders/$orderId');
+    final response =
+        await http.get(url, headers: {'Authorization': 'Bearer $token'});
+    if (response.statusCode == 200) {
+      return Order.fromJson(jsonDecode(response.body));
+    } else if (response.statusCode == 403) {
+      throw Exception('You do not have access to this order.');
+    } else {
+      throw Exception('Could not load order details.');
     }
   }
 }

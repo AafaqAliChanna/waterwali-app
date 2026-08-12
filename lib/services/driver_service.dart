@@ -67,4 +67,16 @@ class DriverService {
       throw Exception('Could not accept order. Please try again.');
     }
   }
+
+  Future<Order> completeOrder(String token, int orderId) async {
+    final url = Uri.parse('$_baseUrl/orders/$orderId/complete');
+    final response = 
+    await http.post(url, headers: {'Authorization': 'Bearer $token'});
+    if (response.statusCode == 200) {
+        return Order.fromJson(jsonDecode(response.body));
+    } else {
+        throw Exception('Could not mark order as delivered. Please try again.');
+    }
+    
+  }
 }
