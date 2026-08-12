@@ -6,6 +6,7 @@ import '../models/wallet_model.dart';
 import '../services/driver_service.dart';
 import '../services/wallet_service.dart';
 import '../services/auth_provider.dart';
+import 'active_order_screen.dart';
 
 class DriverHomeScreen extends StatefulWidget {
   const DriverHomeScreen({super.key});
@@ -140,12 +141,15 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     if (confirmed != true || !mounted) return;
 
     try {
-      await _driverService.acceptOrder(_token!, order.id);
+      final accepted = await _driverService.acceptOrder(_token!, order.id);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Order #${order.id} accepted!')),
       );
       _loadNearbyOrders(); // refresh list — that order is no longer PENDING
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (context) => ActiveOrderScreen(orderId: accepted.id)),
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

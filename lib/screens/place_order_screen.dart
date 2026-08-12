@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../models/order_model.dart';
 import '../services/order_service.dart';
 import '../services/auth_provider.dart';
+import 'active_order_screen.dart';
 
 class PlaceOrderScreen extends StatefulWidget {
   const PlaceOrderScreen({super.key});
@@ -164,7 +165,9 @@ class _PlaceOrderScreenState extends State<PlaceOrderScreen> {
       );
 
       if (!mounted) return;
-      Navigator.of(context).pop(); // back to home screen
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (context) => ActiveOrderScreen(orderId: order.id)),
+      );
     } catch (e) {
       if (!mounted) return;
       setState(() {
