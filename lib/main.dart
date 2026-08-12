@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'services/auth_provider.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
+import 'screens/driver_home_screen.dart';
 
 void main() {
   runApp(
@@ -23,11 +24,13 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(primarySwatch: Colors.blue),
       home: Consumer<AuthProvider>(
         builder: (context, authProvider, child) {
-          if (authProvider.isAuthenticated) {
-            return const HomeScreen();
-          } else {
+          if (!authProvider.isAuthenticated) {
             return const LoginScreen();
           }
+          // Route by role — customers and drivers see different home screens.
+          return authProvider.isDriver
+              ? const DriverHomeScreen()
+              : const HomeScreen();
         },
       ),
     );
