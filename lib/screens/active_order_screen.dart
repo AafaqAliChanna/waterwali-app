@@ -1,11 +1,15 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/order_model.dart';
 import '../services/order_service.dart';
 import '../services/driver_service.dart';
-import 'chat_screen.dart';
 import '../services/auth_provider.dart';
+import '../services/location_socket_service.dart';
+import 'chat_screen.dart';
 
 class ActiveOrderScreen extends StatefulWidget {
   final int orderId;
@@ -18,11 +22,18 @@ class ActiveOrderScreen extends StatefulWidget {
 class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
   final OrderService _orderService = OrderService();
   final DriverService _driverService = DriverService();
+  final LocationSocketService _locationSocket = LocationSocketService();
 
   bool _isLoading = true;
   Order? _order;
   String? _error;
   bool _isCompleting = false;
+
+  // Live location tracking state
+  bool _locationTrackingStarted = false;
+  LatLng? _driverLocation; // customer side: where the driver currently is
+  GoogleMapController? _mapController;
+  StreamSubscription<Position>? _positionStream; // driver side: GPS stream
 
   String? get _token => Provider.of<AuthProvider>(context, listen: false).token;
   bool get _isDriver => Provider.of<AuthProvider>(context, listen: false).isDriver;
@@ -45,6 +56,7 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
         _order = order;
         _isLoading = false;
       });
+      _syncLocationTracking();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -52,6 +64,67 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
         _isLoading = false;
       });
     }
+  }
+
+  // Starts tracking once (when the order becomes ACCEPTED/IN_PROGRESS) and
+  // stops it if the order later becomes COMPLETED/CANCELLED.
+  void _syncLocationTracking() {
+    final status = _order?.status;
+    final isActive = status == 'ACCEPTED' || status == 'IN_PROGRESS';
+
+    if (isActive && !_locationTrackingStarted) {
+      _locationTrackingStarted = true;
+      _isDriver ? _startSendingLocation() : _startReceivingLocation();
+    } else if (!isActive && _locationTrackingStarted) {
+      _stopLocationTracking();
+    }
+  }
+
+  void _startReceivingLocation() {
+    _locationSocket.connect(
+      token: _token!,
+      orderId: widget.orderId,
+      onConnected: () {},
+      onLocationReceived: (update) {
+        if (!mounted) return;
+        final position = LatLng(update.latitude, update.longitude);
+        setState(() => _driverLocation = position);
+        _mapController?.animateCamera(CameraUpdate.newLatLng(position));
+      },
+      onError: (error) {
+        // Non-fatal — the rest of the screen still works without live
+        // tracking, so we just leave _driverLocation as-is.
+      },
+    );
+  }
+
+  void _startSendingLocation() {
+    _locationSocket.connect(
+      token: _token!,
+      orderId: widget.orderId,
+      onConnected: () {
+        // Only start streaming GPS once the socket is actually connected.
+        _positionStream = Geolocator.getPositionStream(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+            distanceFilter: 20, // send an update every ~20 meters moved
+          ),
+        ).listen((position) {
+          _locationSocket.sendLocation(
+            widget.orderId,
+            position.latitude,
+            position.longitude,
+          );
+        });
+      },
+      onError: (error) {},
+    );
+  }
+
+  void _stopLocationTracking() {
+    _positionStream?.cancel();
+    _positionStream = null;
+    _locationSocket.disconnect();
   }
 
   Future<void> _callOtherParty() async {
@@ -98,6 +171,7 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
         _order = order;
         _isCompleting = false;
       });
+      _syncLocationTracking(); // status is now COMPLETED — this stops tracking
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Order marked as delivered!')),
       );
@@ -124,6 +198,12 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
       default:
         return Colors.grey;
     }
+  }
+
+  @override
+  void dispose() {
+    _stopLocationTracking();
+    super.dispose();
   }
 
   @override
@@ -161,6 +241,8 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
   Widget _buildOrderDetails() {
     final order = _order!;
     final otherPhone = _isDriver ? order.customerPhone : order.driverPhone;
+    final showLiveMap =
+        !_isDriver && (order.status == 'ACCEPTED' || order.status == 'IN_PROGRESS');
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -196,6 +278,10 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
             ),
           ),
         ),
+        if (showLiveMap) ...[
+          const SizedBox(height: 16),
+          _buildLiveMap(order),
+        ],
         const SizedBox(height: 16),
         if (otherPhone != null) ...[
           SizedBox(
@@ -261,6 +347,44 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
           ),
         ],
       ],
+    );
+  }
+
+  Widget _buildLiveMap(Order order) {
+    final destination = LatLng(order.latitude, order.longitude);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: SizedBox(
+        height: 220,
+        child: _driverLocation == null
+            ? Container(
+                color: Colors.white,
+                child: const Center(
+                  child: Text('Waiting for driver location...',
+                      style: TextStyle(color: Colors.black54)),
+                ),
+              )
+            : GoogleMap(
+                initialCameraPosition: CameraPosition(target: _driverLocation!, zoom: 14),
+                onMapCreated: (controller) => _mapController = controller,
+                markers: {
+                  Marker(
+                    markerId: const MarkerId('driver'),
+                    position: _driverLocation!,
+                    icon: BitmapDescriptor.defaultMarkerWithHue(
+                        BitmapDescriptor.hueAzure),
+                    infoWindow: const InfoWindow(title: 'Driver'),
+                  ),
+                  Marker(
+                    markerId: const MarkerId('destination'),
+                    position: destination,
+                    infoWindow: const InfoWindow(title: 'Delivery address'),
+                  ),
+                },
+                zoomControlsEnabled: false,
+                myLocationButtonEnabled: false,
+              ),
+      ),
     );
   }
 }
