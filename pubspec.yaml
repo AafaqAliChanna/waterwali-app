@@ -20,6 +20,7 @@ dependencies:
   google_maps_flutter: ^2.10.0
   geolocator: ^13.0.2 
   url_launcher: ^6.3.1
+  stomp_dart_client: ^2.1.0
 
 dev_dependencies:
   flutter_test:
