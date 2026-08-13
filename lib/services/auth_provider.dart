@@ -44,6 +44,27 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  Future<bool> register(String name, String phone, String password, String role) async {
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      final authData = await _apiService.register(name, phone, password, role);
+      _token = authData.token;
+      _userId = authData.userId;
+      _name = authData.name;
+      _role = authData.role;
+      await _storage.write(key: 'jwt_token', value: _token);
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
   Future<void> logout() async {
     _token = null;
     _userId = null;
