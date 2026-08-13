@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/auth_provider.dart';
+import 'register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -39,6 +40,15 @@ class _LoginScreenState extends State<LoginScreen> {
             authProvider.isLoading 
                 ? const CircularProgressIndicator() 
                 : ElevatedButton(onPressed: _clickLoginButton, child: const Text('LOGIN')),
+            const SizedBox(height: 12),
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (context) => const RegisterScreen()),
+                );
+              },
+              child: const Text("Don't have an account? Register"),
+            ),
           ],
         ),
       ),
