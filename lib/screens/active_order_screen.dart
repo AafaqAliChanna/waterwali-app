@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../models/order_model.dart';
 import '../services/order_service.dart';
 import '../services/driver_service.dart';
+import 'chat_screen.dart';
 import '../services/auth_provider.dart';
 
 class ActiveOrderScreen extends StatefulWidget {
@@ -196,7 +197,7 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
           ),
         ),
         const SizedBox(height: 16),
-        if (otherPhone != null)
+        if (otherPhone != null) ...[
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
@@ -209,8 +210,25 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
               icon: const Icon(Icons.call),
               label: Text(_isDriver ? 'Call Customer' : 'Call Driver'),
             ),
-          )
-        else
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFF1E88E5),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (context) => ChatScreen(orderId: order.id)),
+                );
+              },
+              icon: const Icon(Icons.chat_bubble_outline),
+              label: const Text('Chat'),
+            ),
+          ),
+        ] else
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 8),
             child: Text(
