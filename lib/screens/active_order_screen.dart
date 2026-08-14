@@ -12,7 +12,7 @@ import '../services/location_socket_service.dart';
 import 'chat_screen.dart';
 
 class ActiveOrderScreen extends StatefulWidget {
-  final int orderId;
+  final String orderId;
   const ActiveOrderScreen({super.key, required this.orderId});
 
   @override
