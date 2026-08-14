@@ -1,7 +1,7 @@
 class ChatMessage {
   final int id;
   final int orderId;
-  final int senderId;
+  final String senderId; // CHANGED: backend sends UUID string
   final String message;
   final String createdAt;
 
@@ -17,7 +17,7 @@ class ChatMessage {
     return ChatMessage(
       id: json['id'],
       orderId: json['orderId'],
-      senderId: json['senderId'],
+      senderId: json['senderId']?.toString() ?? '',
       message: json['message'] ?? '',
       createdAt: json['createdAt'] ?? '',
     );

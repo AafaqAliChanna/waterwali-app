@@ -6,7 +6,7 @@ import '../services/chat_socket_service.dart';
 import '../services/auth_provider.dart';
 
 class ChatScreen extends StatefulWidget {
-  final int orderId;
+  final String orderId;
   const ChatScreen({super.key, required this.orderId});
 
   @override
@@ -26,7 +26,7 @@ class _ChatScreenState extends State<ChatScreen> {
   String? _socketError;
 
   String? get _token => Provider.of<AuthProvider>(context, listen: false).token;
-  int? get _myUserId => Provider.of<AuthProvider>(context, listen: false).userId;
+  String? get _myUserId => Provider.of<AuthProvider>(context, listen: false).userId;
 
   @override
   void initState() {
