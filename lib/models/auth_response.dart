@@ -1,6 +1,6 @@
 class AuthResponse {
   final String token;
-  final int userId;
+  final String userId; // CHANGED: was int, but backend sends a UUID string
   final String name;
   final String role;
 
@@ -14,7 +14,7 @@ class AuthResponse {
   factory AuthResponse.fromJson(Map<String, dynamic> json) {
     return AuthResponse(
       token: json['token'] ?? '',
-      userId: json['userId'] ?? 0,
+      userId: json['userId']?.toString() ?? '', // CHANGED: read as string, not int
       name: json['name'] ?? '',
       role: json['role'] ?? '',
     );

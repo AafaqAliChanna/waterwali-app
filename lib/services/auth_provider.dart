@@ -7,17 +7,15 @@ class AuthProvider extends ChangeNotifier {
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
   bool _isLoading = false;
   String? _token;
-  int? _userId;
+  String? _userId; // CHANGED: was int?
   String? _name;
   String? _role;
 
   bool get isLoading => _isLoading;
   bool get isAuthenticated => _token != null;
 
-  // NEW: exposed so other services (OrderService, etc.) can attach
-  // "Authorization: Bearer <token>" to their own API calls.
   String? get token => _token;
-  int? get userId => _userId;
+  String? get userId => _userId; // CHANGED: was int?
   String? get name => _name;
   String? get role => _role;
   bool get isCustomer => _role == 'CUSTOMER';
@@ -38,6 +36,8 @@ class AuthProvider extends ChangeNotifier {
       notifyListeners();
       return true;
     } catch (e) {
+      // CHANGED: now actually visible in console instead of silently swallowed
+      debugPrint('LOGIN ERROR: $e');
       _isLoading = false;
       notifyListeners();
       return false;
@@ -59,6 +59,8 @@ class AuthProvider extends ChangeNotifier {
       notifyListeners();
       return true;
     } catch (e) {
+      // CHANGED: now actually visible in console instead of silently swallowed
+      debugPrint('REGISTER ERROR: $e');
       _isLoading = false;
       notifyListeners();
       return false;
