@@ -1,8 +1,9 @@
 import 'dart:convert';
 import 'package:stomp_dart_client/stomp_dart_client.dart';
+import 'network_config.dart';
 
 class LocationUpdate {
-  final int orderId;
+  final String orderId;
   final double latitude;
   final double longitude;
 
@@ -14,7 +15,7 @@ class LocationUpdate {
 
   factory LocationUpdate.fromJson(Map<String, dynamic> json) {
     return LocationUpdate(
-      orderId: json['orderId'],
+      orderId: json['orderId']?.toString() ?? '',
       latitude: (json['latitude'] as num).toDouble(),
       longitude: (json['longitude'] as num).toDouble(),
     );
@@ -24,13 +25,13 @@ class LocationUpdate {
 class LocationSocketService {
   StompClient? _client;
 
-  static const String _wsUrl = 'ws://10.0.2.2:8080/ws';
+  static String get _wsUrl => NetworkConfig.wsUrlForRuntime;
 
   // onLocationReceived is only needed on the customer side (they subscribe).
   // The driver side connects just to send, so it's left null there.
   void connect({
     required String token,
-    required int orderId,
+    required String orderId,
     required void Function() onConnected,
     void Function(LocationUpdate update)? onLocationReceived,
     required void Function(String error) onError,
@@ -59,7 +60,7 @@ class LocationSocketService {
     _client!.activate();
   }
 
-  void sendLocation(int orderId, double latitude, double longitude) {
+  void sendLocation(String orderId, double latitude, double longitude) {
     if (_client == null || !_client!.connected) return;
     _client!.send(
       destination: '/app/location/update',
