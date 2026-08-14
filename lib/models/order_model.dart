@@ -33,9 +33,9 @@ extension TankerSizeX on TankerSize {
 }
 
 class Order {
-  final int id;
-  final int customerId;
-  final int? driverId;
+  final String id;
+  final String customerId; // CHANGED: backend sends UUID strings for user IDs
+  final String? driverId;
   final double latitude;
   final double longitude;
   final String tankerSize;
@@ -64,9 +64,9 @@ class Order {
 
   factory Order.fromJson(Map<String, dynamic> json) {
     return Order(
-      id: json['id'],
-      customerId: json['customerId'],
-      driverId: json['driverId'],
+      id: json['id']?.toString() ?? '',
+      customerId: json['customerId']?.toString() ?? '',
+      driverId: json['driverId']?.toString(),
       // Cast via num first — the JSON value can arrive as int or double
       // depending on the value, and .toDouble() only exists on num.
       latitude: (json['latitude'] as num).toDouble(),
