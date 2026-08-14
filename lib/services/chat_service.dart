@@ -6,7 +6,7 @@ import 'api_service.dart';
 class ChatService {
   static final String _baseUrl = ApiService.baseUrl;
 
-  Future<List<ChatMessage>> getHistory(String token, int orderId) async {
+  Future<List<ChatMessage>> getHistory(String token, String orderId) async {
     final url = Uri.parse('$_baseUrl/orders/$orderId/chat');
     final response =
         await http.get(url, headers: {'Authorization': 'Bearer $token'});

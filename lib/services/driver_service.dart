@@ -54,7 +54,7 @@ class DriverService {
     }
   }
 
-  Future<Order> acceptOrder(String token, int orderId) async {
+  Future<Order> acceptOrder(String token, String orderId) async {
     final url = Uri.parse('$_baseUrl/orders/$orderId/accept');
     final response =
         await http.post(url, headers: {'Authorization': 'Bearer $token'});
@@ -68,7 +68,7 @@ class DriverService {
     }
   }
 
-  Future<Order> completeOrder(String token, int orderId) async {
+  Future<Order> completeOrder(String token, String orderId) async {
     final url = Uri.parse('$_baseUrl/orders/$orderId/complete');
     final response = 
     await http.post(url, headers: {'Authorization': 'Bearer $token'});

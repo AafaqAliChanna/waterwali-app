@@ -52,7 +52,7 @@ class OrderService {
     }
   }
 
-  Future<Order> getOrder(String token, int orderId) async {
+  Future<Order> getOrder(String token, String orderId) async {
     final url = Uri.parse('$_baseUrl/orders/$orderId');
     final response =
         await http.get(url, headers: {'Authorization': 'Bearer $token'});
