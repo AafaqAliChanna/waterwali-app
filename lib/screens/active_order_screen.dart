@@ -13,8 +13,12 @@ import 'chat_screen.dart';
 
 class ActiveOrderScreen extends StatefulWidget {
   final String orderId;
-  const ActiveOrderScreen({super.key, required this.orderId});
-
+  // If the caller already has the full Order object (from placing/accepting/
+  // a list screen), pass it here to skip the initial GET entirely — that GET
+  // is customer-only per the backend spec, so a driver opening their own
+  // freshly-accepted order would otherwise 403 immediately.
+  final Order? initialOrder;
+  const ActiveOrderScreen({super.key, required this.orderId, this.initialOrder});
   @override
   State<ActiveOrderScreen> createState() => _ActiveOrderScreenState();
 }
@@ -38,12 +42,18 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
   String? get _token => Provider.of<AuthProvider>(context, listen: false).token;
   bool get _isDriver => Provider.of<AuthProvider>(context, listen: false).isDriver;
 
-  @override
+@override
   void initState() {
     super.initState();
-    _loadOrder();
+    if (widget.initialOrder != null) {
+      _order = widget.initialOrder;
+      _isLoading = false;
+      _syncLocationTracking();
+    } else {
+      _loadOrder();
+    }
   }
-
+  
   Future<void> _loadOrder() async {
     setState(() {
       _isLoading = true;

@@ -6,6 +6,7 @@ import '../models/wallet_model.dart';
 import '../services/driver_service.dart';
 import '../services/wallet_service.dart';
 import '../services/auth_provider.dart';
+import 'order_history_screen.dart';
 import 'active_order_screen.dart';
 
 class DriverHomeScreen extends StatefulWidget {
@@ -148,8 +149,11 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
       );
       _loadNearbyOrders(); // refresh list — that order is no longer PENDING
       Navigator.of(context).push(
-        MaterialPageRoute(builder: (context) => ActiveOrderScreen(orderId: accepted.id)),
+        MaterialPageRoute(
+          builder: (context) => ActiveOrderScreen(orderId: accepted.id, initialOrder: accepted),
+        ),
       );
+
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -230,11 +234,26 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
         foregroundColor: Colors.white,
         actions: [
           IconButton(
+            icon: const Icon(Icons.history),
+            tooltip: 'My Deliveries',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => OrderHistoryScreen(
+                    title: 'My Deliveries',
+                    fetchOrders: (token) => _driverService.myOrders(token),
+                  ),
+                ),
+              );
+            },
+          ),
+          IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () => auth.logout(),
           ),
         ],
       ),
+      
       body: _isLoadingWallet
           ? const Center(child: CircularProgressIndicator())
           : _walletError != null

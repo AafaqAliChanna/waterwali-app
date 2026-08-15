@@ -166,8 +166,11 @@ class _PlaceOrderScreenState extends State<PlaceOrderScreen> {
 
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (context) => ActiveOrderScreen(orderId: order.id)),
+        MaterialPageRoute(
+          builder: (context) => ActiveOrderScreen(orderId: order.id, initialOrder: order),
+        ),
       );
+
     } catch (e) {
       if (!mounted) return;
       setState(() {
