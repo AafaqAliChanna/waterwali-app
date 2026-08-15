@@ -68,6 +68,20 @@ class DriverService {
     }
   }
 
+  Future<List<Order>> myOrders(String token) async {
+    // NOTE: endpoint path assumed — confirm the final route name with your
+    // backend partner once he adds this (it doesn't exist in the spec yet).
+    final url = Uri.parse('$_baseUrl/orders/driver-mine');
+    final response =
+        await http.get(url, headers: {'Authorization': 'Bearer $token'});
+    if (response.statusCode == 200) {
+      final List<dynamic> data = jsonDecode(response.body);
+      return data.map((json) => Order.fromJson(json)).toList();
+    } else {
+      throw Exception('Could not load your deliveries.');
+    }
+  }
+
   Future<Order> completeOrder(String token, String orderId) async {
     final url = Uri.parse('$_baseUrl/orders/$orderId/complete');
     final response = 
