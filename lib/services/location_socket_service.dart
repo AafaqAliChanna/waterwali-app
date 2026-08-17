@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:stomp_dart_client/stomp_dart_client.dart';
+import 'api_service.dart';
 import 'network_config.dart';
+import 'session_manager.dart';
 
 class LocationUpdate {
   final String orderId;
@@ -24,6 +26,7 @@ class LocationUpdate {
 
 class LocationSocketService {
   StompClient? _client;
+  bool _everConnected = false;
 
   static String get _wsUrl => NetworkConfig.wsUrlForRuntime;
 
@@ -36,10 +39,12 @@ class LocationSocketService {
     void Function(LocationUpdate update)? onLocationReceived,
     required void Function(String error) onError,
   }) {
+    _everConnected = false;
     _client = StompClient(
       config: StompConfig(
         url: '$_wsUrl?token=$token',
         onConnect: (frame) {
+          _everConnected = true;
           onConnected();
           if (onLocationReceived != null) {
             _client!.subscribe(
@@ -52,12 +57,29 @@ class LocationSocketService {
             );
           }
         },
-        onWebSocketError: (dynamic error) => onError(error.toString()),
-        onStompError: (frame) => onError(frame.body ?? 'Location connection error'),
+        onWebSocketError: (dynamic error) => _handleFailure(token, onError),
+        onStompError: (frame) => _handleFailure(token, onError),
         onDisconnect: (frame) {},
       ),
     );
     _client!.activate();
+  }
+
+  Future<void> _handleFailure(String token, void Function(String) onError) async {
+    if (_everConnected) {
+      // Already had a working connection — this is a network drop, not an
+      // auth problem. A driver mid-delivery shouldn't get logged out over
+      // a WiFi blip.
+      onError('Live location disconnected.');
+      return;
+    }
+    final stillValid = await ApiService().isSessionValid(token);
+    if (!stillValid) {
+      SessionManager.onSessionExpired?.call();
+      onError('Session expired. Please log in again.');
+    } else {
+      onError('Could not connect to live location. Check your internet connection.');
+    }
   }
 
   void sendLocation(String orderId, double latitude, double longitude) {
