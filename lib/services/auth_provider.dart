@@ -8,16 +8,16 @@ class AuthProvider extends ChangeNotifier {
   bool _isLoading = false;
   bool _isInitializing = true;
   String? _token;
-  String? _userId; // CHANGED: was int?
+  String? _userId;
   String? _name;
   String? _role;
 
   bool get isLoading => _isLoading;
-  bool get isAuthenticated => _token != null;
   bool get isInitializing => _isInitializing;
+  bool get isAuthenticated => _token != null;
 
   String? get token => _token;
-  String? get userId => _userId; // CHANGED: was int?
+  String? get userId => _userId;
   String? get name => _name;
   String? get role => _role;
   bool get isCustomer => _role == 'CUSTOMER';
@@ -38,8 +38,29 @@ class AuthProvider extends ChangeNotifier {
       notifyListeners();
       return true;
     } catch (e) {
-      // CHANGED: now actually visible in console instead of silently swallowed
       debugPrint('LOGIN ERROR: $e');
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> register(String name, String phone, String password, String role) async {
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      final authData = await _apiService.register(name, phone, password, role);
+      _token = authData.token;
+      _userId = authData.userId;
+      _name = authData.name;
+      _role = authData.role;
+      await _storage.write(key: 'jwt_token', value: _token);
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      debugPrint('REGISTER ERROR: $e');
       _isLoading = false;
       notifyListeners();
       return false;
@@ -60,35 +81,13 @@ class AuthProvider extends ChangeNotifier {
       _name = authData.name;
       _role = authData.role;
     } catch (e) {
+      debugPrint('AUTO-LOGIN ERROR: $e');
       // Stored token is invalid or expired — clear it and fall back to login.
       await _storage.delete(key: 'jwt_token');
       _token = null;
     }
     _isInitializing = false;
     notifyListeners();
-  }
-
-  Future<bool> register(String name, String phone, String password, String role) async {
-    _isLoading = true;
-    notifyListeners();
-
-    try {
-      final authData = await _apiService.register(name, phone, password, role);
-      _token = authData.token;
-      _userId = authData.userId;
-      _name = authData.name;
-      _role = authData.role;
-      await _storage.write(key: 'jwt_token', value: _token);
-      _isLoading = false;
-      notifyListeners();
-      return true;
-    } catch (e) {
-      // CHANGED: now actually visible in console instead of silently swallowed
-      debugPrint('REGISTER ERROR: $e');
-      _isLoading = false;
-      notifyListeners();
-      return false;
-    }
   }
 
   Future<void> logout() async {
