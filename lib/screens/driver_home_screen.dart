@@ -29,6 +29,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
 
   bool _isLoadingOrders = false;
   List<Order> _nearbyOrders = [];
+  final Set<String> _acceptingOrderIds = {};
   String? _ordersError;
 
   String? get _token =>
@@ -120,6 +121,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   }
 
   Future<void> _acceptOrder(Order order) async {
+    if (_acceptingOrderIds.contains(order.id)) return; // already in flight
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -141,6 +143,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     );
     if (confirmed != true || !mounted) return;
 
+    setState(() => _acceptingOrderIds.add(order.id));
     try {
       final accepted = await _driverService.acceptOrder(_token!, order.id);
       if (!mounted) return;
@@ -153,7 +156,6 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
           builder: (context) => ActiveOrderScreen(orderId: accepted.id, initialOrder: accepted),
         ),
       );
-
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -162,6 +164,8 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
           backgroundColor: const Color(0xFFD32F2F),
         ),
       );
+    } finally {
+      if (mounted) setState(() => _acceptingOrderIds.remove(order.id));
     }
   }
 
@@ -451,8 +455,17 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                           shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(10)),
                         ),
-                        onPressed: () => _acceptOrder(order),
-                        child: const Text('Accept'),
+                        onPressed: _acceptingOrderIds.contains(order.id)
+                            ? null
+                            : () => _acceptOrder(order),
+                        child: _acceptingOrderIds.contains(order.id)
+                            ? const SizedBox(
+                                height: 16,
+                                width: 16,
+                                child: CircularProgressIndicator(
+                                    color: Colors.white, strokeWidth: 2),
+                              )
+                            : const Text('Accept'),
                       ),
                     ],
                   ),
