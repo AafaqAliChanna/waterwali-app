@@ -5,6 +5,7 @@ import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/driver_home_screen.dart';
 import 'screens/splash_screen.dart';
+import 'services/session_manager.dart';
 
 void main() {
   runApp(
@@ -40,7 +41,11 @@ class _AuthGateState extends State<AuthGate> {
   @override
   void initState() {
     super.initState();
-    Provider.of<AuthProvider>(context, listen: false).tryAutoLogin();
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    // Any service that hits a 401 calls this, forcing an immediate logout
+    // no matter which screen the user happens to be on at the time.
+    SessionManager.onSessionExpired = auth.logout;
+    auth.tryAutoLogin();
   }
 
   @override
