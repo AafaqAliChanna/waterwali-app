@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/order_model.dart';
 import 'api_service.dart';
+import 'session_manager.dart';
 
 class DriverService {
   static final String _baseUrl = ApiService.baseUrl;
@@ -14,9 +15,11 @@ class DriverService {
       final data = jsonDecode(response.body);
       return data['isOnline'] ?? true;
     } else if (response.statusCode == 403) {
-      // Backend returns 403 if wallet < PKR 200 or the driver is suspended.
       throw Exception(
           'Cannot go online — your wallet balance is below PKR 200, or your account is suspended.');
+    } else if (response.statusCode == 401) {
+      SessionManager.onSessionExpired?.call();
+      throw Exception('Session expired. Please log in again.');
     } else {
       throw Exception('Could not go online. Please try again.');
     }
@@ -29,6 +32,9 @@ class DriverService {
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
       return data['isOnline'] ?? false;
+    } else if (response.statusCode == 401) {
+      SessionManager.onSessionExpired?.call();
+      throw Exception('Session expired. Please log in again.');
     } else {
       throw Exception('Could not go offline. Please try again.');
     }
@@ -49,6 +55,9 @@ class DriverService {
       return data.map((json) => Order.fromJson(json)).toList();
     } else if (response.statusCode == 403) {
       throw Exception('Only drivers can view nearby orders.');
+    } else if (response.statusCode == 401) {
+      SessionManager.onSessionExpired?.call();
+      throw Exception('Session expired. Please log in again.');
     } else {
       throw Exception('Could not load nearby orders.');
     }
@@ -61,22 +70,25 @@ class DriverService {
     if (response.statusCode == 200) {
       return Order.fromJson(jsonDecode(response.body));
     } else if (response.statusCode == 409) {
-      // Another driver got there first.
       throw Exception('Too late — another driver already accepted this order.');
+    } else if (response.statusCode == 401) {
+      SessionManager.onSessionExpired?.call();
+      throw Exception('Session expired. Please log in again.');
     } else {
       throw Exception('Could not accept order. Please try again.');
     }
   }
 
   Future<List<Order>> myOrders(String token) async {
-    // NOTE: endpoint path assumed — confirm the final route name with your
-    // backend partner once he adds this (it doesn't exist in the spec yet).
     final url = Uri.parse('$_baseUrl/orders/driver-mine');
     final response =
         await http.get(url, headers: {'Authorization': 'Bearer $token'});
     if (response.statusCode == 200) {
       final List<dynamic> data = jsonDecode(response.body);
       return data.map((json) => Order.fromJson(json)).toList();
+    } else if (response.statusCode == 401) {
+      SessionManager.onSessionExpired?.call();
+      throw Exception('Session expired. Please log in again.');
     } else {
       throw Exception('Could not load your deliveries.');
     }
@@ -84,13 +96,15 @@ class DriverService {
 
   Future<Order> completeOrder(String token, String orderId) async {
     final url = Uri.parse('$_baseUrl/orders/$orderId/complete');
-    final response = 
-    await http.post(url, headers: {'Authorization': 'Bearer $token'});
+    final response =
+        await http.post(url, headers: {'Authorization': 'Bearer $token'});
     if (response.statusCode == 200) {
-        return Order.fromJson(jsonDecode(response.body));
+      return Order.fromJson(jsonDecode(response.body));
+    } else if (response.statusCode == 401) {
+      SessionManager.onSessionExpired?.call();
+      throw Exception('Session expired. Please log in again.');
     } else {
-        throw Exception('Could not mark order as delivered. Please try again.');
+      throw Exception('Could not mark order as delivered. Please try again.');
     }
-    
   }
 }

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/wallet_model.dart';
 import 'api_service.dart';
+import 'session_manager.dart';
 
 class WalletService {
   static final String _baseUrl = ApiService.baseUrl;
@@ -12,6 +13,9 @@ class WalletService {
         await http.get(url, headers: {'Authorization': 'Bearer $token'});
     if (response.statusCode == 200) {
       return Wallet.fromJson(jsonDecode(response.body));
+    } else if (response.statusCode == 401) {
+      SessionManager.onSessionExpired?.call();
+      throw Exception('Session expired. Please log in again.');
     } else {
       throw Exception('Could not load wallet balance.');
     }
@@ -29,6 +33,9 @@ class WalletService {
     );
     if (response.statusCode == 200) {
       return Wallet.fromJson(jsonDecode(response.body));
+    } else if (response.statusCode == 401) {
+      SessionManager.onSessionExpired?.call();
+      throw Exception('Session expired. Please log in again.');
     } else {
       throw Exception('Top-up failed. Please try again.');
     }

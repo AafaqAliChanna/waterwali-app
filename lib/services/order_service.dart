@@ -2,10 +2,9 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/order_model.dart';
 import 'api_service.dart';
+import 'session_manager.dart';
 
 class OrderService {
-  // Reuses the same base URL ApiService already defines, so there's
-  // only one place to change it if the backend address ever moves.
   static final String _baseUrl = ApiService.baseUrl;
 
   Future<Order> placeOrder({
@@ -21,8 +20,6 @@ class OrderService {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $token',
       },
-      // Note: price is never sent — the server calculates it. Sending it
-      // would just be ignored (or rejected), so we don't include the field.
       body: jsonEncode({
         'latitude': latitude,
         'longitude': longitude,
@@ -32,6 +29,9 @@ class OrderService {
 
     if (response.statusCode == 200) {
       return Order.fromJson(jsonDecode(response.body));
+    } else if (response.statusCode == 401) {
+      SessionManager.onSessionExpired?.call();
+      throw Exception('Session expired. Please log in again.');
     } else {
       throw Exception('Could not place your order. Please try again.');
     }
@@ -47,6 +47,9 @@ class OrderService {
     if (response.statusCode == 200) {
       final List<dynamic> data = jsonDecode(response.body);
       return data.map((json) => Order.fromJson(json)).toList();
+    } else if (response.statusCode == 401) {
+      SessionManager.onSessionExpired?.call();
+      throw Exception('Session expired. Please log in again.');
     } else {
       throw Exception('Could not load your orders.');
     }
@@ -60,6 +63,9 @@ class OrderService {
       return Order.fromJson(jsonDecode(response.body));
     } else if (response.statusCode == 403) {
       throw Exception('You do not have access to this order.');
+    } else if (response.statusCode == 401) {
+      SessionManager.onSessionExpired?.call();
+      throw Exception('Session expired. Please log in again.');
     } else {
       throw Exception('Could not load order details.');
     }
