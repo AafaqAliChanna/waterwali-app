@@ -1,24 +1,10 @@
 import 'dart:convert';
-import 'dart:io' show Platform;
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 import '../models/auth_response.dart';
+import 'network_config.dart';
 
 class ApiService {
-  static String get baseUrl {
-    if (kIsWeb) {
-      // Running in Chrome/web -- talks straight to your laptop's localhost.
-      return 'http://localhost:8080/api';
-    } else if (Platform.isAndroid) {
-      // Android EMULATOR only -- 10.0.2.2 is the emulator's special alias
-      // for "my computer's localhost." A real Android phone needs your
-      // computer's actual LAN IP instead.
-      return 'http://10.0.2.2:8080/api';
-    } else {
-      // iOS simulator, desktop, etc. -- these can reach localhost directly.
-      return 'http://localhost:8080/api';
-    }
-  }
+  static String get baseUrl => NetworkConfig.apiBaseUrlForRuntime;
 
   Future<AuthResponse> login(String phone, String password) async {
     final url = Uri.parse('$baseUrl/auth/login');
@@ -61,4 +47,26 @@ class ApiService {
       throw Exception('Could not create account. That phone number may already be registered.');
     }
   }
+
+  Future<AuthResponse> getCurrentUser(String token) async {
+    final url = Uri.parse('$baseUrl/users/me');
+    final response =
+        await http.get(url, headers: {'Authorization': 'Bearer $token'});
+
+    if (response.statusCode == 200) {
+      final json = jsonDecode(response.body);
+      // /users/me returns {id, name, phone, role} — no token in the body,
+      // since we're the one supplying it. We reuse AuthResponse anyway so
+      // the rest of the auth flow doesn't need a second model.
+      return AuthResponse(
+        token: token,
+        userId: json['id']?.toString() ?? '',
+        name: json['name'] ?? '',
+        role: json['role'] ?? '',
+      );
+    } else {
+      throw Exception('Session expired. Please log in again.');
+    }
+  }
+  
 }

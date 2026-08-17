@@ -6,6 +6,7 @@ class AuthProvider extends ChangeNotifier {
   final ApiService _apiService = ApiService();
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
   bool _isLoading = false;
+  bool _isInitializing = true;
   String? _token;
   String? _userId; // CHANGED: was int?
   String? _name;
@@ -13,6 +14,7 @@ class AuthProvider extends ChangeNotifier {
 
   bool get isLoading => _isLoading;
   bool get isAuthenticated => _token != null;
+  bool get isInitializing => _isInitializing;
 
   String? get token => _token;
   String? get userId => _userId; // CHANGED: was int?
@@ -42,6 +44,28 @@ class AuthProvider extends ChangeNotifier {
       notifyListeners();
       return false;
     }
+  }
+
+  Future<void> tryAutoLogin() async {
+    final storedToken = await _storage.read(key: 'jwt_token');
+    if (storedToken == null) {
+      _isInitializing = false;
+      notifyListeners();
+      return;
+    }
+    try {
+      final authData = await _apiService.getCurrentUser(storedToken);
+      _token = authData.token;
+      _userId = authData.userId;
+      _name = authData.name;
+      _role = authData.role;
+    } catch (e) {
+      // Stored token is invalid or expired — clear it and fall back to login.
+      await _storage.delete(key: 'jwt_token');
+      _token = null;
+    }
+    _isInitializing = false;
+    notifyListeners();
   }
 
   Future<bool> register(String name, String phone, String password, String role) async {
