@@ -68,5 +68,18 @@ class ApiService {
       throw Exception('Session expired. Please log in again.');
     }
   }
+
+  // Lightweight check used only when a WebSocket fails ambiguously (dead
+  // token vs. plain network blip). Reuses the same REST endpoint, since a
+  // REST 401 is unambiguous — the WebSocket's own error text isn't
+  // guaranteed to say anything meaningful about *why* it failed.
+  Future<bool> isSessionValid(String token) async {
+    try {
+      await getCurrentUser(token);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
   
 }
