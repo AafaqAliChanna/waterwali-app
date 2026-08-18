@@ -140,16 +140,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 ),
                 const SizedBox(height: AppSpacing.xl),
 
-                ElevatedButton(
-                  onPressed: authProvider.isLoading ? null : _submit,
-                  child: authProvider.isLoading
-                      ? const SizedBox(
-                          height: 22,
-                          width: 22,
-                          child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
-                        )
-                      : const Text('CREATE ACCOUNT'),
+                                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: authProvider.isLoading ? null : _submit,
+                    child: authProvider.isLoading
+                        ? const SizedBox(
+                            height: 22,
+                            width: 22,
+                            child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
+                          )
+                        : const Text('CREATE ACCOUNT'),
+                  ),
                 ),
+
                 const SizedBox(height: AppSpacing.lg),
               ],
             ),
