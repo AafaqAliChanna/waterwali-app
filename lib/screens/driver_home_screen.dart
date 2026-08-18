@@ -6,6 +6,7 @@ import '../models/wallet_model.dart';
 import '../services/driver_service.dart';
 import '../services/wallet_service.dart';
 import '../services/auth_provider.dart';
+import '../theme/app_theme.dart';
 import 'order_history_screen.dart';
 import 'active_order_screen.dart';
 
@@ -161,7 +162,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(e.toString().replaceFirst('Exception: ', '')),
-          backgroundColor: const Color(0xFFD32F2F),
+          backgroundColor: AppColors.danger,
         ),
       );
     } finally {
@@ -177,6 +178,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
         title: const Text('Top Up Wallet'),
         content: TextField(
           controller: controller,
+          autofocus: true,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           decoration: const InputDecoration(labelText: 'Amount (PKR)'),
         ),
@@ -205,37 +207,57 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+        SnackBar(
+          content: Text(e.toString().replaceFirst('Exception: ', '')),
+          backgroundColor: AppColors.danger,
+        ),
       );
     }
+  }
+
+  Future<void> _confirmLogout() async {
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Logout'),
+        content: const Text('Are you sure you want to logout?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Logout'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) auth.logout();
   }
 
   Color _statusColor(String status) {
     switch (status) {
       case 'PENDING':
-        return const Color(0xFFF57C00);
+        return AppColors.warning;
       case 'ACCEPTED':
       case 'IN_PROGRESS':
-        return const Color(0xFF1E88E5);
+        return AppColors.primary;
       case 'COMPLETED':
-        return const Color(0xFF2E7D32);
+        return AppColors.success;
       case 'CANCELLED':
-        return const Color(0xFFD32F2F);
+        return AppColors.danger;
       default:
-        return Colors.grey;
+        return AppColors.textSecondary;
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final auth = Provider.of<AuthProvider>(context, listen: false);
-
     return Scaffold(
-      backgroundColor: const Color(0xFFF7FAFC),
       appBar: AppBar(
         title: const Text('Driver Home'),
-        backgroundColor: const Color(0xFF1E88E5),
-        foregroundColor: Colors.white,
         actions: [
           IconButton(
             icon: const Icon(Icons.history),
@@ -252,24 +274,25 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
             },
           ),
           IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () => auth.logout(),
+            icon: const Icon(Icons.logout_outlined),
+            tooltip: 'Logout',
+            onPressed: _confirmLogout,
           ),
         ],
       ),
-      
       body: _isLoadingWallet
           ? const Center(child: CircularProgressIndicator())
           : _walletError != null
               ? Center(
                   child: Padding(
-                    padding: const EdgeInsets.all(24.0),
+                    padding: const EdgeInsets.all(AppSpacing.lg),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(_walletError!,
-                            style: const TextStyle(color: Color(0xFFD32F2F))),
-                        const SizedBox(height: 12),
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: AppColors.danger)),
+                        const SizedBox(height: AppSpacing.md),
                         ElevatedButton(
                           onPressed: _loadWallet,
                           child: const Text('Retry'),
@@ -281,12 +304,12 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
               : RefreshIndicator(
                   onRefresh: _loadNearbyOrders,
                   child: ListView(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(AppSpacing.md),
                     children: [
                       _buildWalletCard(),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: AppSpacing.md),
                       _buildOnlineToggleCard(),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: AppSpacing.md),
                       if (_wallet!.isOnline) _buildNearbyOrdersSection(),
                     ],
                   ),
@@ -296,31 +319,22 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
 
   Widget _buildWalletCard() {
     return Card(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppSpacing.md),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Wallet Balance',
-                    style: TextStyle(color: Colors.black54, fontSize: 13)),
+                Text('Wallet Balance', style: Theme.of(context).textTheme.bodySmall),
                 Text(
                   'PKR ${_wallet!.balance.toStringAsFixed(0)}',
-                  style: const TextStyle(
-                      fontSize: 22, fontWeight: FontWeight.bold),
+                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
                 ),
               ],
             ),
             ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF1E88E5),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10)),
-              ),
               onPressed: _showTopupDialog,
               child: const Text('Top Up'),
             ),
@@ -332,23 +346,33 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
 
   Widget _buildOnlineToggleCard() {
     return Card(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppSpacing.md),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  _wallet!.isOnline ? 'You are ONLINE' : 'You are OFFLINE',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: _wallet!.isOnline
-                        ? const Color(0xFF2E7D32)
-                        : Colors.black54,
-                  ),
+                Row(
+                  children: [
+                    Container(
+                      width: 10,
+                      height: 10,
+                      decoration: BoxDecoration(
+                        color: _wallet!.isOnline ? AppColors.success : AppColors.textSecondary,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Text(
+                      _wallet!.isOnline ? 'You are Online' : 'You are Offline',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: _wallet!.isOnline ? AppColors.success : AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
                 ),
                 _isTogglingOnline
                     ? const SizedBox(
@@ -358,15 +382,14 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                       )
                     : Switch(
                         value: _wallet!.isOnline,
-                        activeThumbColor: const Color(0xFF1E88E5),
+                        activeThumbColor: AppColors.primary,
                         onChanged: (value) => _toggleOnline(value),
                       ),
               ],
             ),
             if (_toggleError != null) ...[
-              const SizedBox(height: 8),
-              Text(_toggleError!,
-                  style: const TextStyle(color: Color(0xFFD32F2F))),
+              const SizedBox(height: AppSpacing.sm),
+              Text(_toggleError!, style: const TextStyle(color: AppColors.danger)),
             ],
           ],
         ),
@@ -381,8 +404,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text('Nearby Orders',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            Text('Nearby Orders', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 16)),
             IconButton(
               icon: const Icon(Icons.refresh),
               onPressed: _isLoadingOrders ? null : _loadNearbyOrders,
@@ -391,30 +413,26 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
         ),
         if (_isLoadingOrders)
           const Padding(
-            padding: EdgeInsets.symmetric(vertical: 24),
+            padding: EdgeInsets.symmetric(vertical: AppSpacing.lg),
             child: Center(child: CircularProgressIndicator()),
           )
         else if (_ordersError != null)
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Text(_ordersError!,
-                style: const TextStyle(color: Color(0xFFD32F2F))),
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+            child: Text(_ordersError!, style: const TextStyle(color: AppColors.danger)),
           )
         else if (_nearbyOrders.isEmpty)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 24),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
             child: Center(
-              child: Text('No pending orders nearby right now.',
-                  style: TextStyle(color: Colors.black54)),
+              child: Text('No pending orders nearby right now.', style: Theme.of(context).textTheme.bodySmall),
             ),
           )
         else
           ..._nearbyOrders.map((order) => Card(
-                margin: const EdgeInsets.only(bottom: 10),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10)),
+                margin: const EdgeInsets.only(bottom: AppSpacing.sm),
                 child: Padding(
-                  padding: const EdgeInsets.all(14),
+                  padding: const EdgeInsets.all(AppSpacing.md),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -425,36 +443,27 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                             Row(
                               children: [
                                 Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 8, vertical: 3),
+                                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 3),
                                   decoration: BoxDecoration(
                                     color: _statusColor(order.status),
-                                    borderRadius: BorderRadius.circular(12),
+                                    borderRadius: BorderRadius.circular(AppRadius.pill),
                                   ),
                                   child: Text(
                                     order.status,
-                                    style: const TextStyle(
-                                        color: Colors.white, fontSize: 11),
+                                    style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
                                   ),
                                 ),
-                                const SizedBox(width: 8),
+                                const SizedBox(width: AppSpacing.sm),
                                 Text(order.tankerSize.asTankerSizeLabel),
                               ],
                             ),
-                            const SizedBox(height: 6),
+                            const SizedBox(height: AppSpacing.xs),
                             Text('PKR ${order.price.toStringAsFixed(0)}',
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.bold)),
+                                style: const TextStyle(fontWeight: FontWeight.bold)),
                           ],
                         ),
                       ),
                       ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF1E88E5),
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10)),
-                        ),
                         onPressed: _acceptingOrderIds.contains(order.id)
                             ? null
                             : () => _acceptOrder(order),
@@ -462,8 +471,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                             ? const SizedBox(
                                 height: 16,
                                 width: 16,
-                                child: CircularProgressIndicator(
-                                    color: Colors.white, strokeWidth: 2),
+                                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                               )
                             : const Text('Accept'),
                       ),
