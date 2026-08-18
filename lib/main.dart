@@ -6,6 +6,7 @@ import 'screens/home_screen.dart';
 import 'screens/driver_home_screen.dart';
 import 'screens/splash_screen.dart';
 import 'services/session_manager.dart';
+import 'theme/app_theme.dart';
 
 void main() {
   runApp(
@@ -23,7 +24,7 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'WaterWali',
-      theme: ThemeData(primarySwatch: Colors.blue),
+      theme: AppTheme.light,
       home: const AuthGate(),
     );
   }
