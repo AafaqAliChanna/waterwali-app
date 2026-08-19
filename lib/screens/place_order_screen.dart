@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart';
 import 'package:provider/provider.dart';
 import '../models/order_model.dart';
 import '../services/order_service.dart';
 import '../services/auth_provider.dart';
+import '../theme/app_theme.dart';
 import 'active_order_screen.dart';
 
 class PlaceOrderScreen extends StatefulWidget {
@@ -29,6 +31,14 @@ class _PlaceOrderScreenState extends State<PlaceOrderScreen> {
 
   bool _isPlacingOrder = false;
   String? _orderError;
+
+  // Reverse-geocoded address shown above the pin. _addressRequestId guards
+  // against a slow, stale lookup overwriting a newer one if the user drags
+  // the map again before the first lookup returns.
+  String? _address;
+  bool _isLoadingAddress = false;
+  bool _addressUnavailable = false;
+  int _addressRequestId = 0;
 
   @override
   void initState() {
@@ -76,6 +86,7 @@ class _PlaceOrderScreenState extends State<PlaceOrderScreen> {
         _selectedLocation = LatLng(position.latitude, position.longitude);
         _isLoadingLocation = false;
       });
+      _reverseGeocode(_selectedLocation!);
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -91,6 +102,58 @@ class _PlaceOrderScreenState extends State<PlaceOrderScreen> {
     _selectedLocation = position.target;
   }
 
+  // Only look up the address once the user stops moving the map — geocoding
+  // on every frame of a drag would be wasteful and would flicker constantly.
+  void _onCameraIdle() {
+    if (_selectedLocation != null) _reverseGeocode(_selectedLocation!);
+  }
+
+  Future<void> _reverseGeocode(LatLng location) async {
+    final requestId = ++_addressRequestId;
+    setState(() {
+      _isLoadingAddress = true;
+      _addressUnavailable = false;
+    });
+    try {
+      final placemarks = await placemarkFromCoordinates(
+        location.latitude,
+        location.longitude,
+      );
+      if (!mounted || requestId != _addressRequestId) return; // stale result
+
+      if (placemarks.isEmpty) {
+        setState(() {
+          _address = null;
+          _addressUnavailable = true;
+          _isLoadingAddress = false;
+        });
+        return;
+      }
+
+      final p = placemarks.first;
+      final parts = [p.street, p.subLocality, p.locality]
+          .where((s) => s != null && s.trim().isNotEmpty)
+          .toSet() // drop duplicate segments some devices return
+          .toList();
+
+      setState(() {
+        _address = parts.isNotEmpty ? parts.join(', ') : null;
+        _addressUnavailable = parts.isEmpty;
+        _isLoadingAddress = false;
+      });
+    } catch (e) {
+      // Reverse geocoding can fail (no native geocoder on some platforms, or
+      // no internet) — that's non-fatal, the order still submits fine using
+      // raw coordinates. We just can't show a friendly address.
+      if (!mounted || requestId != _addressRequestId) return;
+      setState(() {
+        _address = null;
+        _addressUnavailable = true;
+        _isLoadingAddress = false;
+      });
+    }
+  }
+
   Future<void> _confirmAndPlaceOrder() async {
     if (_selectedLocation == null) return;
 
@@ -99,7 +162,8 @@ class _PlaceOrderScreenState extends State<PlaceOrderScreen> {
       builder: (context) => AlertDialog(
         title: const Text('Confirm Order'),
         content: Text(
-          'Place an order for a ${_selectedSize.label} tanker to this location?\n\n'
+          'Place an order for a ${_selectedSize.label} tanker to '
+          '${_address ?? 'this location'}?\n\n'
           'The final price will be calculated by WaterWali and shown once your order is placed. Payment is Cash on Delivery.',
         ),
         actions: [
@@ -183,12 +247,7 @@ class _PlaceOrderScreenState extends State<PlaceOrderScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF7FAFC),
-      appBar: AppBar(
-        title: const Text('Place Your Order'),
-        backgroundColor: const Color(0xFF1E88E5),
-        foregroundColor: Colors.white,
-      ),
+      appBar: AppBar(title: const Text('Place Your Order')),
       body: _isLoadingLocation
           ? const Center(child: CircularProgressIndicator())
           : _locationError != null
@@ -200,33 +259,23 @@ class _PlaceOrderScreenState extends State<PlaceOrderScreen> {
   Widget _buildLocationError() {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(24.0),
+        padding: const EdgeInsets.all(AppSpacing.lg),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.location_off, size: 48, color: Color(0xFFD32F2F)),
-            const SizedBox(height: 16),
+            const Icon(Icons.location_off, size: 48, color: AppColors.danger),
+            const SizedBox(height: AppSpacing.md),
             Text(
               _locationError!,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: Color(0xFFD32F2F)),
+              style: const TextStyle(color: AppColors.danger),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: AppSpacing.lg),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF1E88E5),
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
                 onPressed: _determinePosition,
-                child: const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 12),
-                  child: Text('Try Again'),
-                ),
+                child: const Text('Try Again'),
               ),
             ),
           ],
@@ -251,6 +300,7 @@ class _PlaceOrderScreenState extends State<PlaceOrderScreen> {
                 ),
                 onMapCreated: (controller) => _mapController = controller,
                 onCameraMove: _onCameraMove,
+                onCameraIdle: _onCameraIdle,
                 myLocationEnabled: true,
                 myLocationButtonEnabled: true,
                 zoomControlsEnabled: false,
@@ -260,8 +310,14 @@ class _PlaceOrderScreenState extends State<PlaceOrderScreen> {
                 child: Icon(
                   Icons.location_pin,
                   size: 44,
-                  color: Color(0xFFD32F2F),
+                  color: AppColors.danger,
                 ),
+              ),
+              Positioned(
+                top: AppSpacing.md,
+                left: AppSpacing.md,
+                right: AppSpacing.md,
+                child: _buildAddressPill(),
               ),
             ],
           ),
@@ -269,73 +325,54 @@ class _PlaceOrderScreenState extends State<PlaceOrderScreen> {
         // Order controls panel below the map.
         Container(
           decoration: const BoxDecoration(
-            color: Colors.white,
+            color: AppColors.surface,
             boxShadow: [
               BoxShadow(color: Colors.black12, blurRadius: 8, offset: Offset(0, -2)),
             ],
           ),
-          padding: const EdgeInsets.all(16.0),
+          padding: const EdgeInsets.all(AppSpacing.md),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Tanker Size',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-              ),
-              const SizedBox(height: 10),
-              Wrap(
-                spacing: 8,
+              Text('Tanker Size', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 16)),
+              const SizedBox(height: AppSpacing.sm),
+              GridView.count(
+                crossAxisCount: 2,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                mainAxisSpacing: AppSpacing.sm,
+                crossAxisSpacing: AppSpacing.sm,
+                childAspectRatio: 2.4,
                 children: TankerSize.values.map((size) {
-                  final selected = size == _selectedSize;
-                  return ChoiceChip(
-                    label: Text(size.label),
-                    selected: selected,
-                    selectedColor: const Color(0xFF1E88E5),
-                    labelStyle: TextStyle(
-                      color: selected ? Colors.white : Colors.black87,
-                    ),
-                    onSelected: (_) => setState(() => _selectedSize = size),
+                  return _TankerSizeCard(
+                    size: size,
+                    selected: size == _selectedSize,
+                    onTap: () => setState(() => _selectedSize = size),
                   );
                 }).toList(),
               ),
-              const SizedBox(height: 12),
-              const Text(
-                'Move the map so the pin marks your delivery address. Price is calculated automatically.',
-                style: TextStyle(color: Colors.black54, fontSize: 12),
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                'Price is calculated automatically based on tanker size and distance.',
+                style: Theme.of(context).textTheme.bodySmall,
               ),
               if (_orderError != null) ...[
-                const SizedBox(height: 10),
-                Text(
-                  _orderError!,
-                  style: const TextStyle(color: Color(0xFFD32F2F)),
-                ),
+                const SizedBox(height: AppSpacing.sm),
+                Text(_orderError!, style: const TextStyle(color: AppColors.danger)),
               ],
-              const SizedBox(height: 14),
+              const SizedBox(height: AppSpacing.md),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF1E88E5),
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
                   onPressed: _isPlacingOrder ? null : _confirmAndPlaceOrder,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    child: _isPlacingOrder
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2,
-                            ),
-                          )
-                        : const Text('PLACE ORDER'),
-                  ),
+                  child: _isPlacingOrder
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                        )
+                      : const Text('PLACE ORDER'),
                 ),
               ),
             ],
@@ -345,9 +382,119 @@ class _PlaceOrderScreenState extends State<PlaceOrderScreen> {
     );
   }
 
+  Widget _buildAddressPill() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+        boxShadow: const [
+          BoxShadow(color: Colors.black26, blurRadius: 6, offset: Offset(0, 2)),
+        ],
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.place_outlined, size: 18, color: AppColors.primary),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: _isLoadingAddress
+                ? Text('Finding address...', style: Theme.of(context).textTheme.bodySmall)
+                : Text(
+                    _addressUnavailable || _address == null
+                        ? 'Move the map to set delivery pin'
+                        : _address!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _mapController?.dispose();
     super.dispose();
+  }
+}
+
+// A selectable card for one tanker size, with a small row of water-drop
+// icons to give a quick visual sense of relative scale (1 drop = smallest).
+class _TankerSizeCard extends StatelessWidget {
+  final TankerSize size;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _TankerSizeCard({
+    required this.size,
+    required this.selected,
+    required this.onTap,
+  });
+
+  int get _dropCount {
+    switch (size) {
+      case TankerSize.size1000L:
+        return 1;
+      case TankerSize.size2000L:
+        return 2;
+      case TankerSize.size3000L:
+        return 3;
+      case TankerSize.size5000L:
+        return 4;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppRadius.md),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.sm),
+        decoration: BoxDecoration(
+          color: selected ? AppColors.primary.withValues(alpha: 0.08) : AppColors.background,
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          border: Border.all(
+            color: selected ? AppColors.primary : AppColors.border,
+            width: selected ? 1.5 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Row(
+                    children: List.generate(
+                      _dropCount,
+                      (i) => Icon(
+                        Icons.water_drop,
+                        size: 12,
+                        color: selected ? AppColors.primary : AppColors.textSecondary,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    size.label,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                      color: selected ? AppColors.primary : AppColors.textPrimary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (selected) const Icon(Icons.check_circle, color: AppColors.primary, size: 20),
+          ],
+        ),
+      ),
+    );
   }
 }
