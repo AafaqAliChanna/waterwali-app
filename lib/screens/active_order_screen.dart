@@ -9,14 +9,11 @@ import '../services/order_service.dart';
 import '../services/driver_service.dart';
 import '../services/auth_provider.dart';
 import '../services/location_socket_service.dart';
+import '../theme/app_theme.dart';
 import 'chat_screen.dart';
 
 class ActiveOrderScreen extends StatefulWidget {
   final String orderId;
-  // If the caller already has the full Order object (from placing/accepting/
-  // a list screen), pass it here to skip the initial GET entirely — that GET
-  // is customer-only per the backend spec, so a driver opening their own
-  // freshly-accepted order would otherwise 403 immediately.
   final Order? initialOrder;
   const ActiveOrderScreen({super.key, required this.orderId, this.initialOrder});
   @override
@@ -33,16 +30,15 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
   String? _error;
   bool _isCompleting = false;
 
-  // Live location tracking state
   bool _locationTrackingStarted = false;
-  LatLng? _driverLocation; // customer side: where the driver currently is
+  LatLng? _driverLocation;
   GoogleMapController? _mapController;
-  StreamSubscription<Position>? _positionStream; // driver side: GPS stream
+  StreamSubscription<Position>? _positionStream;
 
   String? get _token => Provider.of<AuthProvider>(context, listen: false).token;
   bool get _isDriver => Provider.of<AuthProvider>(context, listen: false).isDriver;
 
-@override
+  @override
   void initState() {
     super.initState();
     if (widget.initialOrder != null) {
@@ -53,7 +49,7 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
       _loadOrder();
     }
   }
-  
+
   Future<void> _loadOrder() async {
     setState(() {
       _isLoading = true;
@@ -76,8 +72,6 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
     }
   }
 
-  // Starts tracking once (when the order becomes ACCEPTED/IN_PROGRESS) and
-  // stops it if the order later becomes COMPLETED/CANCELLED.
   void _syncLocationTracking() {
     final status = _order?.status;
     final isActive = status == 'ACCEPTED' || status == 'IN_PROGRESS';
@@ -101,10 +95,7 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
         setState(() => _driverLocation = position);
         _mapController?.animateCamera(CameraUpdate.newLatLng(position));
       },
-      onError: (error) {
-        // Non-fatal — the rest of the screen still works without live
-        // tracking, so we just leave _driverLocation as-is.
-      },
+      onError: (error) {},
     );
   }
 
@@ -113,11 +104,10 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
       token: _token!,
       orderId: widget.orderId,
       onConnected: () {
-        // Only start streaming GPS once the socket is actually connected.
         _positionStream = Geolocator.getPositionStream(
           locationSettings: const LocationSettings(
             accuracy: LocationAccuracy.high,
-            distanceFilter: 20, // send an update every ~20 meters moved
+            distanceFilter: 20,
           ),
         ).listen((position) {
           _locationSocket.sendLocation(
@@ -181,7 +171,7 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
         _order = order;
         _isCompleting = false;
       });
-      _syncLocationTracking(); // status is now COMPLETED — this stops tracking
+      _syncLocationTracking();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Order marked as delivered!')),
       );
@@ -194,22 +184,6 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
     }
   }
 
-  Color _statusColor(String status) {
-    switch (status) {
-      case 'PENDING':
-        return const Color(0xFFF57C00);
-      case 'ACCEPTED':
-      case 'IN_PROGRESS':
-        return const Color(0xFF1E88E5);
-      case 'COMPLETED':
-        return const Color(0xFF2E7D32);
-      case 'CANCELLED':
-        return const Color(0xFFD32F2F);
-      default:
-        return Colors.grey;
-    }
-  }
-
   @override
   void dispose() {
     _stopLocationTracking();
@@ -219,11 +193,8 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF7FAFC),
       appBar: AppBar(
         title: const Text('Order Details'),
-        backgroundColor: const Color(0xFF1E88E5),
-        foregroundColor: Colors.white,
         actions: [
           IconButton(icon: const Icon(Icons.refresh), onPressed: _loadOrder),
         ],
@@ -233,12 +204,12 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
           : _error != null
               ? Center(
                   child: Padding(
-                    padding: const EdgeInsets.all(24.0),
+                    padding: const EdgeInsets.all(AppSpacing.lg),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Text(_error!, style: const TextStyle(color: Color(0xFFD32F2F))),
-                        const SizedBox(height: 12),
+                        Text(_error!, style: const TextStyle(color: AppColors.danger)),
+                        const SizedBox(height: AppSpacing.md),
                         ElevatedButton(onPressed: _loadOrder, child: const Text('Retry')),
                       ],
                     ),
@@ -255,66 +226,59 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
         !_isDriver && (order.status == 'ACCEPTED' || order.status == 'IN_PROGRESS');
 
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(AppSpacing.md),
       children: [
         Card(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           child: Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(AppSpacing.md),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Order #${order.id}',
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: _statusColor(order.status),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(order.status,
-                          style: const TextStyle(color: Colors.white, fontSize: 12)),
+                    Text('Order #${order.id}', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 16)),
+                    Text(
+                      'PKR ${order.price.toStringAsFixed(0)}',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.textPrimary),
                     ),
                   ],
                 ),
-                const SizedBox(height: 10),
-                Text('Tanker: ${order.tankerSize.asTankerSizeLabel}'),
-                const SizedBox(height: 4),
-                Text('Price: PKR ${order.price.toStringAsFixed(0)} (Cash on Delivery)'),
+                const SizedBox(height: 2),
+                Text(
+                  '${order.tankerSize.asTankerSizeLabel} tanker • Cash on Delivery',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: AppSpacing.md),
+                if (order.status == 'CANCELLED')
+                  _buildCancelledBanner()
+                else
+                  _OrderStatusTimeline(status: order.status),
               ],
             ),
           ),
         ),
         if (showLiveMap) ...[
-          const SizedBox(height: 16),
+          const SizedBox(height: AppSpacing.md),
           _buildLiveMap(order),
         ],
-        const SizedBox(height: 16),
+        const SizedBox(height: AppSpacing.md),
         if (otherPhone != null) ...[
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF2E7D32),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                backgroundColor: AppColors.success,
               ),
               onPressed: _callOtherParty,
               icon: const Icon(Icons.call),
               label: Text(_isDriver ? 'Call Customer' : 'Call Driver'),
             ),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: AppSpacing.sm),
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
-              style: OutlinedButton.styleFrom(
-                foregroundColor: const Color(0xFF1E88E5),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              ),
               onPressed: () {
                 Navigator.of(context).push(
                   MaterialPageRoute(builder: (context) => ChatScreen(orderId: order.id)),
@@ -324,35 +288,27 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
               label: const Text('Chat'),
             ),
           ),
-        ] else
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 8),
+        ] else if (order.status != 'CANCELLED')
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
             child: Text(
               'Contact number will appear once a driver accepts this order.',
-              style: TextStyle(color: Colors.black54),
+              style: Theme.of(context).textTheme.bodySmall,
             ),
           ),
         if (_isDriver && (order.status == 'ACCEPTED' || order.status == 'IN_PROGRESS')) ...[
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpacing.sm),
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF1E88E5),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              ),
               onPressed: _isCompleting ? null : _markAsDelivered,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                child: _isCompleting
-                    ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                      )
-                    : const Text('MARK AS DELIVERED'),
-              ),
+              child: _isCompleting
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                    )
+                  : const Text('MARK AS DELIVERED'),
             ),
           ),
         ],
@@ -360,18 +316,38 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
     );
   }
 
+  Widget _buildCancelledBanner() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: AppColors.danger.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: AppColors.danger.withValues(alpha: 0.3)),
+      ),
+      child: const Row(
+        children: [
+          Icon(Icons.cancel_outlined, color: AppColors.danger),
+          SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text('This order was cancelled.', style: TextStyle(color: AppColors.danger, fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildLiveMap(Order order) {
     final destination = LatLng(order.latitude, order.longitude);
     return ClipRRect(
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(AppRadius.md),
       child: SizedBox(
         height: 220,
         child: _driverLocation == null
             ? Container(
-                color: Colors.white,
-                child: const Center(
-                  child: Text('Waiting for driver location...',
-                      style: TextStyle(color: Colors.black54)),
+                color: AppColors.surface,
+                child: Center(
+                  child: Text('Waiting for driver location...', style: Theme.of(context).textTheme.bodySmall),
                 ),
               )
             : GoogleMap(
@@ -381,8 +357,7 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
                   Marker(
                     markerId: const MarkerId('driver'),
                     position: _driverLocation!,
-                    icon: BitmapDescriptor.defaultMarkerWithHue(
-                        BitmapDescriptor.hueAzure),
+                    icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
                     infoWindow: const InfoWindow(title: 'Driver'),
                   ),
                   Marker(
@@ -395,6 +370,97 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
                 myLocationButtonEnabled: false,
               ),
       ),
+    );
+  }
+}
+
+// A 4-step horizontal progress tracker: Pending → Accepted → On the way →
+// Delivered. Each step is either done (filled, checked), current (filled,
+// highlighted), or upcoming (outlined, greyed).
+class _OrderStatusTimeline extends StatelessWidget {
+  final String status;
+  const _OrderStatusTimeline({required this.status});
+
+  static const _steps = [
+    (label: 'Pending', icon: Icons.hourglass_empty, statuses: ['PENDING']),
+    (label: 'Accepted', icon: Icons.check, statuses: ['ACCEPTED']),
+    (label: 'On the way', icon: Icons.local_shipping_outlined, statuses: ['IN_PROGRESS']),
+    (label: 'Delivered', icon: Icons.home_outlined, statuses: ['COMPLETED']),
+  ];
+
+  int get _currentIndex {
+    switch (status) {
+      case 'PENDING':
+        return 0;
+      case 'ACCEPTED':
+        return 1;
+      case 'IN_PROGRESS':
+        return 2;
+      case 'COMPLETED':
+        return 3;
+      default:
+        return 0;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final current = _currentIndex;
+    return Row(
+      children: List.generate(_steps.length * 2 - 1, (i) {
+        if (i.isOdd) {
+          final leftStepIndex = i ~/ 2;
+          final isFilled = leftStepIndex < current;
+          return Expanded(
+            child: Container(
+              height: 2,
+              color: isFilled ? AppColors.primary : AppColors.border,
+            ),
+          );
+        }
+        final stepIndex = i ~/ 2;
+        final step = _steps[stepIndex];
+        final isDone = stepIndex < current;
+        final isCurrent = stepIndex == current;
+        final isFilled = isDone || isCurrent;
+
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 30,
+              height: 30,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: isFilled ? AppColors.primary : AppColors.background,
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: isFilled ? AppColors.primary : AppColors.border,
+                  width: 1.5,
+                ),
+              ),
+              child: Icon(
+                isDone ? Icons.check : step.icon,
+                size: 15,
+                color: isFilled ? Colors.white : AppColors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 4),
+            SizedBox(
+              width: 60,
+              child: Text(
+                step.label,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w400,
+                  color: isFilled ? AppColors.textPrimary : AppColors.textSecondary,
+                ),
+              ),
+            ),
+          ],
+        );
+      }),
     );
   }
 }
