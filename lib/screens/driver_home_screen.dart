@@ -6,10 +6,12 @@ import '../models/wallet_model.dart';
 import '../services/driver_service.dart';
 import '../services/wallet_service.dart';
 import '../services/auth_provider.dart';
+import '../services/notification_service.dart';
 import '../theme/app_theme.dart';
 import 'order_history_screen.dart';
 import 'active_order_screen.dart';
 import 'settings_screen.dart';
+import 'inbox_screen.dart';
 
 class DriverHomeScreen extends StatefulWidget {
   const DriverHomeScreen({super.key});
@@ -19,8 +21,10 @@ class DriverHomeScreen extends StatefulWidget {
 }
 
 class _DriverHomeScreenState extends State<DriverHomeScreen> {
-  final WalletService _walletService = WalletService();
+    final WalletService _walletService = WalletService();
   final DriverService _driverService = DriverService();
+  final NotificationService _notificationService = NotificationService();
+  int _unreadCount = 0;
 
   bool _isLoadingWallet = true;
   Wallet? _wallet;
@@ -37,10 +41,30 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   String? get _token =>
       Provider.of<AuthProvider>(context, listen: false).token;
 
-  @override
+    @override
   void initState() {
     super.initState();
     _loadWallet();
+    _loadUnreadCount();
+  }
+
+  Future<void> _loadUnreadCount() async {
+    final token = _token;
+    if (token == null) return;
+    try {
+      final notifications = await _notificationService.getNotifications(token);
+      if (!mounted) return;
+      setState(() => _unreadCount = notifications.where((n) => !n.read).length);
+    } catch (_) {
+      // Non-fatal — badge just won't refresh this time.
+    }
+  }
+
+  Future<void> _openInbox() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (context) => const InboxScreen()),
+    );
+    _loadUnreadCount();
   }
 
   Future<void> _loadWallet() async {

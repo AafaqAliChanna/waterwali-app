@@ -2,13 +2,48 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/auth_provider.dart';
 import '../services/order_service.dart';
+import '../services/notification_service.dart';
 import '../theme/app_theme.dart';
 import 'place_order_screen.dart';
 import 'order_history_screen.dart';
 import 'settings_screen.dart';
+import 'inbox_screen.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  final NotificationService _notificationService = NotificationService();
+  int _unreadCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUnreadCount();
+  }
+
+  Future<void> _loadUnreadCount() async {
+    final token = Provider.of<AuthProvider>(context, listen: false).token;
+    if (token == null) return;
+    try {
+      final notifications = await _notificationService.getNotifications(token);
+      if (!mounted) return;
+      setState(() => _unreadCount = notifications.where((n) => !n.read).length);
+    } catch (_) {
+      // Non-fatal — badge just won't refresh this time.
+    }
+  }
+
+  Future<void> _openInbox() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (context) => const InboxScreen()),
+    );
+    _loadUnreadCount();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -18,7 +53,26 @@ class HomeScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('WaterWali'),
-                actions: [
+        actions: [
+          IconButton(
+            icon: Badge(
+              isLabelVisible: _unreadCount > 0,
+              label: Text(_unreadCount > 9 ? '9+' : '$_unreadCount'),
+              child: const Icon(Icons.notifications_outlined),
+            ),
+            tooltip: 'Notifications',
+            onPressed: _openInbox,
+          ),
+          
+                    IconButton(
+            icon: Badge(
+              isLabelVisible: _unreadCount > 0,
+              label: Text(_unreadCount > 9 ? '9+' : '$_unreadCount'),
+              child: const Icon(Icons.notifications_outlined),
+            ),
+            tooltip: 'Notifications',
+            onPressed: _openInbox,
+          ),
           IconButton(
             icon: const Icon(Icons.settings_outlined),
             tooltip: 'Settings',
@@ -29,8 +83,8 @@ class HomeScreen extends StatelessWidget {
             },
           ),
         ],
-
       ),
+
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(AppSpacing.lg),
@@ -48,7 +102,6 @@ class HomeScreen extends StatelessWidget {
               ),
               const SizedBox(height: AppSpacing.xl),
 
-              // Primary CTA — the one thing most customers open the app to do.
               InkWell(
                 borderRadius: BorderRadius.circular(AppRadius.lg),
                 onTap: () {
@@ -106,7 +159,6 @@ class HomeScreen extends StatelessWidget {
 
               const SizedBox(height: AppSpacing.md),
 
-              // Secondary action — order history.
               InkWell(
                 borderRadius: BorderRadius.circular(AppRadius.lg),
                 onTap: () {
