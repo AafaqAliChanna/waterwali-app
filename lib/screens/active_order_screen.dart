@@ -29,6 +29,7 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
   Order? _order;
   String? _error;
   bool _isCompleting = false;
+  bool _isCancelling = false;
 
   bool _locationTrackingStarted = false;
   LatLng? _driverLocation;
@@ -175,11 +176,57 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Order marked as delivered!')),
       );
-    } catch (e) {
+        } catch (e) {
       if (!mounted) return;
       setState(() => _isCompleting = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+      );
+    }
+  }
+
+  Future<void> _cancelOrder() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Cancel Order'),
+        content: const Text(
+          'Are you sure you want to cancel this order? This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Keep Order'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Cancel Order'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isCancelling = true);
+    try {
+      final order = await _orderService.cancelOrder(_token!, widget.orderId);
+      if (!mounted) return;
+      setState(() {
+        _order = order;
+        _isCancelling = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Order cancelled.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isCancelling = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceFirst('Exception: ', '')),
+          backgroundColor: AppColors.danger,
+        ),
       );
     }
   }
@@ -308,7 +355,27 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
                       width: 20,
                       child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                     )
-                  : const Text('MARK AS DELIVERED'),
+                                    : const Text('MARK AS DELIVERED'),
+            ),
+          ),
+        ],
+        if (!_isDriver && order.status == 'PENDING') ...[
+          const SizedBox(height: AppSpacing.sm),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.danger,
+                side: const BorderSide(color: AppColors.danger, width: 1.5),
+              ),
+              onPressed: _isCancelling ? null : _cancelOrder,
+              child: _isCancelling
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(color: AppColors.danger, strokeWidth: 2),
+                    )
+                  : const Text('CANCEL ORDER'),
             ),
           ),
         ],

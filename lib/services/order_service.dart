@@ -55,7 +55,7 @@ class OrderService {
     }
   }
 
-  Future<Order> getOrder(String token, String orderId) async {
+    Future<Order> getOrder(String token, String orderId) async {
     final url = Uri.parse('$_baseUrl/orders/$orderId');
     final response =
         await http.get(url, headers: {'Authorization': 'Bearer $token'});
@@ -68,6 +68,24 @@ class OrderService {
       throw Exception('Session expired. Please log in again.');
     } else {
       throw Exception('Could not load order details.');
+    }
+  }
+
+  // Only valid while the order is still PENDING — once a driver accepts,
+  // cancelling stops being the customer's call to make alone.
+  Future<Order> cancelOrder(String token, String orderId) async {
+    final url = Uri.parse('$_baseUrl/orders/$orderId/cancel');
+    final response =
+        await http.post(url, headers: {'Authorization': 'Bearer $token'});
+    if (response.statusCode == 200) {
+      return Order.fromJson(jsonDecode(response.body));
+    } else if (response.statusCode == 409) {
+      throw Exception('This order can no longer be cancelled — a driver may have already accepted it.');
+    } else if (response.statusCode == 401) {
+      SessionManager.onSessionExpired?.call();
+      throw Exception('Session expired. Please log in again.');
+    } else {
+      throw Exception('Could not cancel order. Please try again.');
     }
   }
 }
