@@ -5,6 +5,7 @@ import '../services/order_service.dart';
 import '../theme/app_theme.dart';
 import 'place_order_screen.dart';
 import 'order_history_screen.dart';
+import 'settings_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -17,13 +18,18 @@ class HomeScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('WaterWali'),
-        actions: [
+                actions: [
           IconButton(
-            icon: const Icon(Icons.logout_outlined),
-            tooltip: 'Logout',
-            onPressed: () => _confirmLogout(context, authProvider),
+            icon: const Icon(Icons.settings_outlined),
+            tooltip: 'Settings',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (context) => const SettingsScreen()),
+              );
+            },
           ),
         ],
+
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -158,26 +164,5 @@ class HomeScreen extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  Future<void> _confirmLogout(BuildContext context, AuthProvider authProvider) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Logout'),
-        content: const Text('Are you sure you want to logout?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Logout'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed == true) authProvider.logout();
   }
 }

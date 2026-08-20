@@ -9,6 +9,7 @@ import '../services/auth_provider.dart';
 import '../theme/app_theme.dart';
 import 'order_history_screen.dart';
 import 'active_order_screen.dart';
+import 'settings_screen.dart';
 
 class DriverHomeScreen extends StatefulWidget {
   const DriverHomeScreen({super.key});
@@ -214,28 +215,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
       );
     }
   }
-
-  Future<void> _confirmLogout() async {
-    final auth = Provider.of<AuthProvider>(context, listen: false);
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Logout'),
-        content: const Text('Are you sure you want to logout?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Logout'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed == true) auth.logout();
-  }
+  
 
   Color _statusColor(String status) {
     switch (status) {
@@ -273,11 +253,16 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
               );
             },
           ),
-          IconButton(
-            icon: const Icon(Icons.logout_outlined),
-            tooltip: 'Logout',
-            onPressed: _confirmLogout,
+                    IconButton(
+            icon: const Icon(Icons.settings_outlined),
+            tooltip: 'Settings',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (context) => const SettingsScreen()),
+              );
+            },
           ),
+
         ],
       ),
       body: _isLoadingWallet
