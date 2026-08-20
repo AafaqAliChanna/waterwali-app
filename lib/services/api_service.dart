@@ -63,6 +63,7 @@ class ApiService {
         userId: json['id']?.toString() ?? '',
         name: json['name'] ?? '',
         role: json['role'] ?? '',
+        phone: json['phone']?.toString(),
       );
     } else {
       throw Exception('Session expired. Please log in again.');
@@ -81,5 +82,28 @@ class ApiService {
       return false;
     }
   }
-  
+
+  // Permanently deletes the signed-in user's account. There is currently no
+  // backend endpoint for this — this call will fail with a clear error
+  // until the backend adds DELETE /users/me. Wiring it now means the
+  // feature works the instant the backend catches up, with zero further
+  // frontend changes.
+  Future<void> deleteAccount(String token) async {
+    final url = Uri.parse('$baseUrl/users/me');
+    final response =
+        await http.delete(url, headers: {'Authorization': 'Bearer $token'});
+
+    if (response.statusCode != 200 && response.statusCode != 204) {
+      String message = 'Could not delete account. Please try again later.';
+      try {
+        final json = jsonDecode(response.body);
+        if (json is Map && json['message'] != null) {
+          message = json['message'].toString();
+        }
+      } catch (_) {
+        // Response wasn't JSON — keep the generic message above.
+      }
+      throw Exception(message);
+    }
+  }
 }

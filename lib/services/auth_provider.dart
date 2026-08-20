@@ -11,6 +11,7 @@ class AuthProvider extends ChangeNotifier {
   String? _userId;
   String? _name;
   String? _role;
+  String? _phone;
   String? _errorMessage;
 
   bool get isLoading => _isLoading;
@@ -22,6 +23,7 @@ class AuthProvider extends ChangeNotifier {
   String? get userId => _userId;
   String? get name => _name;
   String? get role => _role;
+  String? get phone => _phone;
   bool get isCustomer => _role == 'CUSTOMER';
   bool get isDriver => _role == 'DRIVER';
 
@@ -51,6 +53,7 @@ class AuthProvider extends ChangeNotifier {
       _userId = authData.userId;
       _name = authData.name;
       _role = authData.role;
+      _phone = authData.phone;
       await _storage.write(key: 'jwt_token', value: _token);
       _isLoading = false;
       notifyListeners();
@@ -75,6 +78,7 @@ class AuthProvider extends ChangeNotifier {
       _userId = authData.userId;
       _name = authData.name;
       _role = authData.role;
+      _phone = authData.phone;
       await _storage.write(key: 'jwt_token', value: _token);
       _isLoading = false;
       notifyListeners();
@@ -101,6 +105,7 @@ class AuthProvider extends ChangeNotifier {
       _userId = authData.userId;
       _name = authData.name;
       _role = authData.role;
+      _phone = authData.phone;
     } catch (e) {
       debugPrint('AUTO-LOGIN ERROR: $e');
       // Stored token is invalid or expired — clear it and fall back to login.
@@ -111,11 +116,43 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  // Re-fetches the profile from the server. Used by the Settings screen so
+  // it always shows fresh data (e.g. phone might not have been populated
+  // yet if this is the first screen since a fresh login/register).
+  Future<void> refreshProfile() async {
+    if (_token == null) return;
+    final authData = await _apiService.getCurrentUser(_token!);
+    _name = authData.name;
+    _role = authData.role;
+    _phone = authData.phone;
+    notifyListeners();
+  }
+
+  Future<bool> deleteAccount() async {
+    if (_token == null) return false;
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      await _apiService.deleteAccount(_token!);
+      await logout();
+      _isLoading = false;
+      return true;
+    } catch (e) {
+      debugPrint('DELETE ACCOUNT ERROR: $e');
+      _errorMessage = _friendlyError(e);
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
   Future<void> logout() async {
     _token = null;
     _userId = null;
     _name = null;
     _role = null;
+    _phone = null;
     await _storage.delete(key: 'jwt_token');
     notifyListeners();
   }
