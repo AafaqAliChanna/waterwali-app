@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart' as ll;
 import 'package:geolocator/geolocator.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -34,9 +35,9 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
   bool _isCancelling = false;
   bool _hasReviewed = false;
 
-  bool _locationTrackingStarted = false;
-  LatLng? _driverLocation;
-  GoogleMapController? _mapController;
+    bool _locationTrackingStarted = false;
+  ll.LatLng? _driverLocation;
+  final MapController _mapController = MapController();
   StreamSubscription<Position>? _positionStream;
 
   String? get _token => Provider.of<AuthProvider>(context, listen: false).token;
@@ -95,9 +96,9 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
       onConnected: () {},
       onLocationReceived: (update) {
         if (!mounted) return;
-        final position = LatLng(update.latitude, update.longitude);
+        final position = ll.LatLng(update.latitude, update.longitude);
         setState(() => _driverLocation = position);
-        _mapController?.animateCamera(CameraUpdate.newLatLng(position));
+        _mapController.move(position, _mapController.camera.zoom);
       },
       onError: (error) {},
     );
@@ -459,8 +460,8 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
     );
   }
 
-  Widget _buildLiveMap(Order order) {
-    final destination = LatLng(order.latitude, order.longitude);
+    Widget _buildLiveMap(Order order) {
+    final destination = ll.LatLng(order.latitude, order.longitude);
     return ClipRRect(
       borderRadius: BorderRadius.circular(AppRadius.md),
       child: SizedBox(
@@ -472,24 +473,34 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
                   child: Text('Waiting for driver location...', style: Theme.of(context).textTheme.bodySmall),
                 ),
               )
-            : GoogleMap(
-                initialCameraPosition: CameraPosition(target: _driverLocation!, zoom: 14),
-                onMapCreated: (controller) => _mapController = controller,
-                markers: {
-                  Marker(
-                    markerId: const MarkerId('driver'),
-                    position: _driverLocation!,
-                    icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
-                    infoWindow: const InfoWindow(title: 'Driver'),
+            : FlutterMap(
+                mapController: _mapController,
+                options: MapOptions(
+                  initialCenter: _driverLocation!,
+                  initialZoom: 14,
+                ),
+                children: [
+                  TileLayer(
+                    urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                    userAgentPackageName: 'com.example.waterwali_app',
                   ),
-                  Marker(
-                    markerId: const MarkerId('destination'),
-                    position: destination,
-                    infoWindow: const InfoWindow(title: 'Delivery address'),
+                  MarkerLayer(
+                    markers: [
+                      Marker(
+                        point: _driverLocation!,
+                        width: 40,
+                        height: 40,
+                        child: const Icon(Icons.local_shipping, color: AppColors.primary, size: 32),
+                      ),
+                      Marker(
+                        point: destination,
+                        width: 36,
+                        height: 36,
+                        child: const Icon(Icons.location_pin, color: AppColors.danger, size: 34),
+                      ),
+                    ],
                   ),
-                },
-                zoomControlsEnabled: false,
-                myLocationButtonEnabled: false,
+                ],
               ),
       ),
     );

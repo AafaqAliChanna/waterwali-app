@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart' as ll;
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:provider/provider.dart';
@@ -17,13 +19,14 @@ class PlaceOrderScreen extends StatefulWidget {
 }
 
 class _PlaceOrderScreenState extends State<PlaceOrderScreen> {
-  final OrderService _orderService = OrderService();
-  GoogleMapController? _mapController;
+    final OrderService _orderService = OrderService();
+  final MapController _mapController = MapController();
+  Timer? _idleDebounce;
 
   // The delivery point is always "whatever's under the pin in the center of
   // the screen" (Uber-style). We track it separately from the camera so we
   // know exactly what to send to the backend when the user confirms.
-  LatLng? _selectedLocation;
+  ll.LatLng? _selectedLocation;
   TankerSize _selectedSize = TankerSize.size1000L;
 
   bool _isLoadingLocation = true; // initial GPS fetch = allowed full-screen blocker
@@ -81,9 +84,9 @@ class _PlaceOrderScreenState extends State<PlaceOrderScreen> {
         ),
       );
 
-      if (!mounted) return;
+            if (!mounted) return;
       setState(() {
-        _selectedLocation = LatLng(position.latitude, position.longitude);
+        _selectedLocation = ll.LatLng(position.latitude, position.longitude);
         _isLoadingLocation = false;
       });
       _reverseGeocode(_selectedLocation!);
@@ -96,19 +99,21 @@ class _PlaceOrderScreenState extends State<PlaceOrderScreen> {
     }
   }
 
-  // Called continuously as the user drags the map, so _selectedLocation
-  // always matches whatever is currently under the fixed center pin.
-  void _onCameraMove(CameraPosition position) {
-    _selectedLocation = position.target;
+    // flutter_map fires this continuously while dragging, with no built-in
+  // "camera idle" event like Google Maps had. We fake one with a short
+  // debounce: every move restarts a 400ms timer, and only once the map has
+  // been still that long do we actually look up the address — otherwise a
+  // single drag would trigger dozens of wasted geocoding calls.
+  void _onPositionChanged(MapCamera camera, bool hasGesture) {
+    _selectedLocation = camera.center;
+    if (!hasGesture) return;
+    _idleDebounce?.cancel();
+    _idleDebounce = Timer(const Duration(milliseconds: 400), () {
+      if (_selectedLocation != null) _reverseGeocode(_selectedLocation!);
+    });
   }
 
-  // Only look up the address once the user stops moving the map — geocoding
-  // on every frame of a drag would be wasteful and would flicker constantly.
-  void _onCameraIdle() {
-    if (_selectedLocation != null) _reverseGeocode(_selectedLocation!);
-  }
-
-  Future<void> _reverseGeocode(LatLng location) async {
+  Future<void> _reverseGeocode(ll.LatLng location) async {
     final requestId = ++_addressRequestId;
     setState(() {
       _isLoadingAddress = true;
@@ -293,17 +298,19 @@ class _PlaceOrderScreenState extends State<PlaceOrderScreen> {
           child: Stack(
             alignment: Alignment.center,
             children: [
-              GoogleMap(
-                initialCameraPosition: CameraPosition(
-                  target: _selectedLocation!,
-                  zoom: 16,
+              FlutterMap(
+                mapController: _mapController,
+                options: MapOptions(
+                  initialCenter: _selectedLocation!,
+                  initialZoom: 16,
+                  onPositionChanged: _onPositionChanged,
                 ),
-                onMapCreated: (controller) => _mapController = controller,
-                onCameraMove: _onCameraMove,
-                onCameraIdle: _onCameraIdle,
-                myLocationEnabled: true,
-                myLocationButtonEnabled: true,
-                zoomControlsEnabled: false,
+                children: [
+                  TileLayer(
+                    urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                    userAgentPackageName: 'com.example.waterwali_app',
+                  ),
+                ],
               ),
               const Padding(
                 padding: EdgeInsets.only(bottom: 36),
@@ -415,7 +422,7 @@ class _PlaceOrderScreenState extends State<PlaceOrderScreen> {
 
   @override
   void dispose() {
-    _mapController?.dispose();
+    _idleDebounce?.cancel();
     super.dispose();
   }
 }
