@@ -11,6 +11,8 @@ import '../services/auth_provider.dart';
 import '../services/location_socket_service.dart';
 import '../theme/app_theme.dart';
 import 'chat_screen.dart';
+import 'driver_profile_screen.dart';
+import 'leave_review_screen.dart';
 
 class ActiveOrderScreen extends StatefulWidget {
   final String orderId;
@@ -30,6 +32,7 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
   String? _error;
   bool _isCompleting = false;
   bool _isCancelling = false;
+  bool _hasReviewed = false;
 
   bool _locationTrackingStarted = false;
   LatLng? _driverLocation;
@@ -310,22 +313,49 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
           _buildLiveMap(order),
         ],
         const SizedBox(height: AppSpacing.md),
-        if (otherPhone != null) ...[
+                if (otherPhone != null) ...[
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.success,
+                backgroundColor: const Color(0xFF2E7D32),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               ),
               onPressed: _callOtherParty,
               icon: const Icon(Icons.call),
               label: Text(_isDriver ? 'Call Customer' : 'Call Driver'),
             ),
           ),
-          const SizedBox(height: AppSpacing.sm),
+          if (!_isDriver && order.driverId != null) ...[
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF1E88E5),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => DriverProfileScreen(driverId: order.driverId!),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.person_outline),
+                label: const Text('View Driver Profile'),
+              ),
+            ),
+          ],
+          const SizedBox(height: 10),
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFF1E88E5),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
               onPressed: () {
                 Navigator.of(context).push(
                   MaterialPageRoute(builder: (context) => ChatScreen(orderId: order.id)),
@@ -356,6 +386,31 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
                       child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                     )
                                     : const Text('MARK AS DELIVERED'),
+            ),
+          ),
+        ],
+        if (!_isDriver && order.status == 'COMPLETED' && !_hasReviewed) ...[
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFFF57C00),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: () async {
+                final submitted = await Navigator.of(context).push<bool>(
+                  MaterialPageRoute(builder: (context) => LeaveReviewScreen(orderId: order.id)),
+                );
+                if (submitted == true && mounted) {
+                  setState(() => _hasReviewed = true);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Thanks for your review!')),
+                  );
+                }
+              },
+              icon: const Icon(Icons.star_outline),
+              label: const Text('Leave a Review'),
             ),
           ),
         ],
