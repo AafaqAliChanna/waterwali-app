@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/auth_provider.dart';
 import '../theme/app_theme.dart';
+import 'about_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -200,12 +201,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ],
           const SizedBox(height: AppSpacing.lg),
 
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.logout_outlined),
-              title: const Text('Logout'),
-              trailing: const Icon(Icons.chevron_right, size: 20),
-              onTap: _confirmLogout,
+                    Card(
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.info_outline),
+                  title: const Text('About'),
+                  trailing: const Icon(Icons.chevron_right, size: 20),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (context) => const AboutScreen()),
+                    );
+                  },
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.logout_outlined),
+                  title: const Text('Logout'),
+                  trailing: const Icon(Icons.chevron_right, size: 20),
+                  onTap: _confirmLogout,
+                ),
+              ],
             ),
           ),
 
