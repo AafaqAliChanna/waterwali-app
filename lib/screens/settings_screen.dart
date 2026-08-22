@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import '../services/auth_provider.dart';
 import '../theme/app_theme.dart';
 import 'about_screen.dart';
+import 'legal_content.dart';
+import 'legal_document_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -204,13 +206,45 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     Card(
             child: Column(
               children: [
-                ListTile(
+                                ListTile(
                   leading: const Icon(Icons.info_outline),
                   title: const Text('About'),
                   trailing: const Icon(Icons.chevron_right, size: 20),
                   onTap: () {
                     Navigator.of(context).push(
                       MaterialPageRoute(builder: (context) => const AboutScreen()),
+                    );
+                  },
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.description_outlined),
+                  title: const Text('Terms of Service'),
+                  trailing: const Icon(Icons.chevron_right, size: 20),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => const LegalDocumentScreen(
+                          title: 'Terms of Service',
+                          content: termsOfServiceText,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.privacy_tip_outlined),
+                  title: const Text('Privacy Policy'),
+                  trailing: const Icon(Icons.chevron_right, size: 20),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => const LegalDocumentScreen(
+                          title: 'Privacy Policy',
+                          content: privacyPolicyText,
+                        ),
+                      ),
                     );
                   },
                 ),
