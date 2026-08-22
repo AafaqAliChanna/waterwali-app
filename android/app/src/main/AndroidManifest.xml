@@ -9,14 +9,6 @@
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
 
-        <!-- REQUIRED: paste your own Google Maps API key here, or the map
-             screen will show a blank grey box. Get one at
-             https://console.cloud.google.com/google/maps-apis (enable
-             "Maps SDK for Android"). -->
-        <meta-data
-            android:name="com.google.android.geo.API_KEY"
-            android:value="YOUR_GOOGLE_MAPS_API_KEY_HERE"/>
-
         <activity
             android:name=".MainActivity"
             android:exported="true"
