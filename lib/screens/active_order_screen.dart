@@ -13,6 +13,7 @@ import '../services/location_socket_service.dart';
 import '../theme/app_theme.dart';
 import 'chat_screen.dart';
 import 'driver_profile_screen.dart';
+import 'file_complaint_screen.dart';
 import 'leave_review_screen.dart';
 
 class ActiveOrderScreen extends StatefulWidget {
@@ -390,6 +391,24 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
             ),
           ),
         ],
+        const SizedBox(height: AppSpacing.md),
+        Center(
+          child: TextButton.icon(
+            onPressed: () async {
+              await Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => FileComplaintScreen(orderId: order.id),
+                ),
+              );
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Complaint submitted. Our team will review it.')),
+              );
+            },
+            icon: const Icon(Icons.flag_outlined, size: 18, color: AppColors.textSecondary),
+            label: const Text('Report a problem', style: TextStyle(color: AppColors.textSecondary)),
+          ),
+        ),
         if (!_isDriver && order.status == 'COMPLETED' && !_hasReviewed) ...[
           const SizedBox(height: 12),
           SizedBox(
