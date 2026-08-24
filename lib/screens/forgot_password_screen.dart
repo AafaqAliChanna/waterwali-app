@@ -37,7 +37,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       setState(() {
         _isLoading = false;
         _step = 2;
-        _successMessage = 'If that number is registered, a code has been sent.';
+        _successMessage = 'If that number is registered, a code has been sent to its email.';
       });
     } catch (e) {
       if (!mounted) return;
@@ -97,7 +97,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           children: [
             if (_step == 1) ...[
               const Text(
-                "Enter your phone number and we'll send you a verification code.",
+                "Enter your phone number and we'll send a verification code "
+                "to the email address on your account.",
                 style: TextStyle(color: AppColors.textSecondary),
               ),
               const SizedBox(height: AppSpacing.md),
@@ -107,9 +108,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                 decoration: const InputDecoration(labelText: 'Phone Number'),
               ),
             ] else ...[
-              Text(
-                'Enter the code sent to ${_phoneController.text.trim()} and choose a new password.',
-                style: const TextStyle(color: AppColors.textSecondary),
+              const Text(
+                'Enter the code sent to your email and choose a new password.',
+                style: TextStyle(color: AppColors.textSecondary),
               ),
               const SizedBox(height: AppSpacing.md),
               TextField(
