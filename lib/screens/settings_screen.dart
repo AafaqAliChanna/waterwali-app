@@ -3,8 +3,9 @@ import 'package:provider/provider.dart';
 import '../services/auth_provider.dart';
 import '../theme/app_theme.dart';
 import 'about_screen.dart';
-import 'legal_content.dart';
+import '../data/legal_content.dart';
 import 'legal_document_screen.dart';
+import 'edit_email_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -206,6 +207,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     Card(
             child: Column(
               children: [
+                ListTile(
+                  leading: const Icon(Icons.email_outlined),
+                  title: const Text('Email Address'),
+                  trailing: const Icon(Icons.chevron_right, size: 20),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (context) => const EditEmailScreen()),
+                    );
+                  },
+                ),
+                const Divider(height: 1),
                                 ListTile(
                   leading: const Icon(Icons.info_outline),
                   title: const Text('About'),
