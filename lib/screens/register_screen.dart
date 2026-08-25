@@ -13,6 +13,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
+  final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   String _role = 'CUSTOMER';
   bool _obscurePassword = true;
@@ -21,6 +22,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   void dispose() {
     _nameController.dispose();
     _phoneController.dispose();
+    _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
@@ -39,6 +41,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
     return null;
   }
 
+  String? _validateEmail(String? value) {
+    final v = value?.trim() ?? '';
+    if (v.isEmpty) return 'Enter your email address';
+    final valid = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(v);
+    if (!valid) return 'Enter a valid email address';
+    return null;
+  }
+
   String? _validatePassword(String? value) {
     if (value == null || value.isEmpty) return 'Enter a password';
     if (value.length < 6) return 'Password must be at least 6 characters';
@@ -54,6 +64,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       _phoneController.text.trim(),
       _passwordController.text,
       _role,
+      _emailController.text.trim(),
     );
 
     if (!success && mounted) {
@@ -100,6 +111,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   decoration: const InputDecoration(
                     labelText: 'Phone Number',
                     prefixIcon: Icon(Icons.phone_outlined),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                TextFormField(
+                  controller: _emailController,
+                  keyboardType: TextInputType.emailAddress,
+                  textInputAction: TextInputAction.next,
+                  validator: _validateEmail,
+                  decoration: const InputDecoration(
+                    labelText: 'Email Address',
+                    prefixIcon: Icon(Icons.email_outlined),
                   ),
                 ),
                 const SizedBox(height: AppSpacing.md),
