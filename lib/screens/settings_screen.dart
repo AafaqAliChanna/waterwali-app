@@ -6,6 +6,7 @@ import 'about_screen.dart';
 import '../data/legal_content.dart';
 import 'legal_document_screen.dart';
 import 'edit_email_screen.dart';
+import 'edit_name_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -207,6 +208,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     Card(
             child: Column(
               children: [
+                ListTile(
+                  leading: const Icon(Icons.badge_outlined),
+                  title: const Text('Edit Name'),
+                  trailing: const Icon(Icons.chevron_right, size: 20),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (context) => const EditNameScreen()),
+                    );
+                  },
+                ),
+                const Divider(height: 1),
                 ListTile(
                   leading: const Icon(Icons.email_outlined),
                   title: const Text('Email Address'),
