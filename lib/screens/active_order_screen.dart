@@ -34,12 +34,19 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
   String? _error;
   bool _isCompleting = false;
   bool _isCancelling = false;
+  bool _isConfirming = false;
   bool _hasReviewed = false;
 
-    bool _locationTrackingStarted = false;
+  bool _locationTrackingStarted = false;
   ll.LatLng? _driverLocation;
   final MapController _mapController = MapController();
   StreamSubscription<Position>? _positionStream;
+
+  // Client-side-only countdown for UX — the real 30s window enforcement
+  // happens server-side via cancelDeadline. This just drives the button
+  // label/visibility so the customer sees it counting down live.
+  Timer? _cancelWindowTimer;
+  int _cancelSecondsRemaining = 0;
 
   String? get _token => Provider.of<AuthProvider>(context, listen: false).token;
   bool get _isDriver => Provider.of<AuthProvider>(context, listen: false).isDriver;
@@ -51,6 +58,7 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
       _order = widget.initialOrder;
       _isLoading = false;
       _syncLocationTracking();
+      _syncCancelWindowTimer();
     } else {
       _loadOrder();
     }
@@ -69,6 +77,7 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
         _isLoading = false;
       });
       _syncLocationTracking();
+      _syncCancelWindowTimer();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -88,6 +97,32 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
     } else if (!isActive && _locationTrackingStarted) {
       _stopLocationTracking();
     }
+  }
+
+  // Drives the live "Cancel Order (27s)" countdown shown to the customer
+  // during the 30s window after driver confirmation. Restarts cleanly
+  // whenever the order data changes (confirm/cancel/reload).
+  void _syncCancelWindowTimer() {
+    _cancelWindowTimer?.cancel();
+    final deadlineStr = _order?.cancelDeadline;
+    if (_isDriver || deadlineStr == null) {
+      setState(() => _cancelSecondsRemaining = 0);
+      return;
+    }
+    final deadline = DateTime.tryParse(deadlineStr);
+    if (deadline == null) {
+      setState(() => _cancelSecondsRemaining = 0);
+      return;
+    }
+    void tick() {
+      if (!mounted) return;
+      final remaining = deadline.difference(DateTime.now()).inSeconds;
+      setState(() => _cancelSecondsRemaining = remaining > 0 ? remaining : 0);
+      if (remaining <= 0) _cancelWindowTimer?.cancel();
+    }
+
+    tick();
+    _cancelWindowTimer = Timer.periodic(const Duration(seconds: 1), (_) => tick());
   }
 
   void _startReceivingLocation() {
@@ -146,6 +181,31 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
     }
   }
 
+  Future<void> _confirmOrder() async {
+    setState(() => _isConfirming = true);
+    try {
+      final order = await _driverService.confirmOrder(_token!, widget.orderId);
+      if (!mounted) return;
+      setState(() {
+        _order = order;
+        _isConfirming = false;
+      });
+      _syncCancelWindowTimer();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Order confirmed with customer.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isConfirming = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceFirst('Exception: ', '')),
+          backgroundColor: AppColors.danger,
+        ),
+      );
+    }
+  }
+
   Future<void> _markAsDelivered() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -181,7 +241,7 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Order marked as delivered!')),
       );
-        } catch (e) {
+    } catch (e) {
       if (!mounted) return;
       setState(() => _isCompleting = false);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -190,13 +250,14 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
     }
   }
 
-  Future<void> _cancelOrder() async {
+  Future<void> _cancelOrder({String? confirmMessage}) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Cancel Order'),
-        content: const Text(
-          'Are you sure you want to cancel this order? This cannot be undone.',
+        content: Text(
+          confirmMessage ??
+              'Are you sure you want to cancel this order? This cannot be undone.',
         ),
         actions: [
           TextButton(
@@ -221,6 +282,8 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
         _order = order;
         _isCancelling = false;
       });
+      _syncLocationTracking();
+      _syncCancelWindowTimer();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Order cancelled.')),
       );
@@ -239,6 +302,7 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
   @override
   void dispose() {
     _stopLocationTracking();
+    _cancelWindowTimer?.cancel();
     super.dispose();
   }
 
@@ -276,6 +340,9 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
     final otherPhone = _isDriver ? order.customerPhone : order.driverPhone;
     final showLiveMap =
         !_isDriver && (order.status == 'ACCEPTED' || order.status == 'IN_PROGRESS');
+    final canMarkDelivered = _isDriver &&
+        ((order.status == 'ACCEPTED' && order.confirmedAt != null) ||
+            order.status == 'IN_PROGRESS');
 
     return ListView(
       padding: const EdgeInsets.all(AppSpacing.md),
@@ -315,7 +382,7 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
           _buildLiveMap(order),
         ],
         const SizedBox(height: AppSpacing.md),
-                if (otherPhone != null) ...[
+        if (otherPhone != null) ...[
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
@@ -375,7 +442,50 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ),
-        if (_isDriver && (order.status == 'ACCEPTED' || order.status == 'IN_PROGRESS')) ...[
+
+        // Driver must confirm (or give up and cancel) before the order can
+        // proceed — see _confirmOrder/_cancelOrder for why this stage exists.
+        if (_isDriver && order.status == 'ACCEPTED' && order.confirmedAt == null) ...[
+          const SizedBox(height: AppSpacing.sm),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: _isConfirming ? null : _confirmOrder,
+              icon: _isConfirming
+                  ? const SizedBox(
+                      height: 16,
+                      width: 16,
+                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                    )
+                  : const Icon(Icons.check_circle_outline),
+              label: const Text('CONFIRMED WITH CUSTOMER'),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.danger,
+                side: const BorderSide(color: AppColors.danger, width: 1.5),
+              ),
+              onPressed: _isCancelling
+                  ? null
+                  : () => _cancelOrder(
+                      confirmMessage:
+                          "Cancel this order because the customer couldn't be reached?"),
+              child: _isCancelling
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(color: AppColors.danger, strokeWidth: 2),
+                    )
+                  : const Text('CUSTOMER UNREACHABLE — CANCEL'),
+            ),
+          ),
+        ],
+
+        if (canMarkDelivered) ...[
           const SizedBox(height: AppSpacing.sm),
           SizedBox(
             width: double.infinity,
@@ -387,10 +497,11 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
                       width: 20,
                       child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                     )
-                                    : const Text('MARK AS DELIVERED'),
+                  : const Text('MARK AS DELIVERED'),
             ),
           ),
         ],
+
         const SizedBox(height: AppSpacing.md),
         Center(
           child: TextButton.icon(
@@ -443,7 +554,7 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
                 foregroundColor: AppColors.danger,
                 side: const BorderSide(color: AppColors.danger, width: 1.5),
               ),
-              onPressed: _isCancelling ? null : _cancelOrder,
+              onPressed: _isCancelling ? null : () => _cancelOrder(),
               child: _isCancelling
                   ? const SizedBox(
                       height: 20,
@@ -451,6 +562,37 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
                       child: CircularProgressIndicator(color: AppColors.danger, strokeWidth: 2),
                     )
                   : const Text('CANCEL ORDER'),
+            ),
+          ),
+        ],
+        // Customer's 30s cancel window after the driver confirms.
+        if (!_isDriver && order.status == 'ACCEPTED' && order.confirmedAt == null) ...[
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            'Your driver will call to confirm the order shortly.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
+        if (!_isDriver &&
+            order.status == 'ACCEPTED' &&
+            order.confirmedAt != null &&
+            _cancelSecondsRemaining > 0) ...[
+          const SizedBox(height: AppSpacing.sm),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.danger,
+                side: const BorderSide(color: AppColors.danger, width: 1.5),
+              ),
+              onPressed: _isCancelling ? null : () => _cancelOrder(),
+              child: _isCancelling
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(color: AppColors.danger, strokeWidth: 2),
+                    )
+                  : Text('CANCEL ORDER (${_cancelSecondsRemaining}s)'),
             ),
           ),
         ],
@@ -479,7 +621,7 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
     );
   }
 
-    Widget _buildLiveMap(Order order) {
+  Widget _buildLiveMap(Order order) {
     final destination = ll.LatLng(order.latitude, order.longitude);
     return ClipRRect(
       borderRadius: BorderRadius.circular(AppRadius.md),
