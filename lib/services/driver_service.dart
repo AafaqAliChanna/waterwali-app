@@ -79,6 +79,22 @@ class DriverService {
     }
   }
 
+  Future<Order> confirmOrder(String token, String orderId) async {
+    final url = Uri.parse('$_baseUrl/orders/$orderId/confirm');
+    final response =
+        await http.post(url, headers: {'Authorization': 'Bearer $token'});
+    if (response.statusCode == 200) {
+      return Order.fromJson(jsonDecode(response.body));
+    } else if (response.statusCode == 401) {
+      SessionManager.onSessionExpired?.call();
+      throw Exception('Session expired. Please log in again.');
+    } else if (response.statusCode == 409) {
+      throw Exception('This order cannot be confirmed right now.');
+    } else {
+      throw Exception('Could not confirm the order. Please try again.');
+    }
+  }
+
   Future<List<Order>> myOrders(String token) async {
     final url = Uri.parse('$_baseUrl/orders/driver-mine');
     final response =

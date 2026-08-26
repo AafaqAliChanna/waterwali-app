@@ -45,8 +45,10 @@ class Order {
   // Null until the order is ACCEPTED or later — the backend hides these on
   // purpose for PENDING orders, so the UI must handle null here, not assume
   // they're always present.
-  final String? customerPhone;
+    final String? customerPhone;
   final String? driverPhone;
+  final String? confirmedAt;
+  final String? cancelDeadline;
 
   Order({
     required this.id,
@@ -60,6 +62,8 @@ class Order {
     required this.createdAt,
     this.customerPhone,
     this.driverPhone,
+    this.confirmedAt,
+    this.cancelDeadline,
   });
 
   factory Order.fromJson(Map<String, dynamic> json) {
@@ -75,8 +79,10 @@ class Order {
       price: (json['price'] as num).toDouble(),
       status: json['status'] ?? '',
       createdAt: json['createdAt'] ?? '',
-      customerPhone: json['customerPhone'],
+            customerPhone: json['customerPhone'],
       driverPhone: json['driverPhone'],
+      confirmedAt: json['confirmedAt'],
+      cancelDeadline: json['cancelDeadline'],
     );
   }
 }
