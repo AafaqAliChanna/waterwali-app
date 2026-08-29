@@ -141,9 +141,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final auth = Provider.of<AuthProvider>(context);
-    final initial = (auth.name ?? '?').trim().isNotEmpty
-        ? auth.name!.trim()[0].toUpperCase()
-        : '?';
+    final displayName = auth.name?.trim() ?? '';
+    final initial = displayName.isNotEmpty ? displayName[0].toUpperCase() : '?';
 
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
@@ -168,8 +167,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          auth.name ?? 'WaterWali User',
+                                                Text(
+                          displayName.isNotEmpty ? displayName : 'WaterWali User',
                           style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
                         ),
                         const SizedBox(height: 2),
