@@ -65,7 +65,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ],
       ),
     );
-    if (confirmed == true) await auth.logout();
+        if (confirmed != true) return;
+    await auth.logout();
+    if (!mounted) return;
+    // logout() swaps AuthGate's content to LoginScreen underneath, but
+    // SettingsScreen is a pushed route sitting on top of it — without this,
+    // that swap is invisible and you're stuck looking at a now-empty
+    // SettingsScreen instead of actually landing on the login screen.
+    Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
   Future<void> _confirmDeleteAccount() async {
@@ -125,17 +132,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (!mounted) return;
     setState(() => _isDeleting = false);
 
-    if (!success) {
+        if (!success) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(auth.errorMessage ?? 'Could not delete account. Please try again.'),
           backgroundColor: AppColors.danger,
         ),
       );
+      return;
     }
-    // On success, AuthProvider.logout() already ran inside deleteAccount(),
-    // so main.dart's Consumer<AuthProvider> will switch back to the login
-    // screen automatically — no manual navigation needed here.
+    // deleteAccount() already ran logout() internally, which swaps
+    // AuthGate's content underneath — same reasoning as _confirmLogout
+    // above, this pop is what actually makes that visible.
+    Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
   @override
