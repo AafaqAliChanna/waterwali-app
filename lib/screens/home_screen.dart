@@ -45,6 +45,13 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadUnreadCount();
   }
 
+  String _greeting() {
+    final hour = DateTime.now().hour;
+    if (hour < 12) return 'Good morning';
+    if (hour < 17) return 'Good afternoon';
+    return 'Good evening';
+  }
+
   @override
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
@@ -55,16 +62,6 @@ class _HomeScreenState extends State<HomeScreen> {
         title: const Text('WaterWali'),
         actions: [
           IconButton(
-            icon: Badge(
-              isLabelVisible: _unreadCount > 0,
-              label: Text(_unreadCount > 9 ? '9+' : '$_unreadCount'),
-              child: const Icon(Icons.notifications_outlined),
-            ),
-            tooltip: 'Notifications',
-            onPressed: _openInbox,
-          ),
-          
-                    IconButton(
             icon: Badge(
               isLabelVisible: _unreadCount > 0,
               label: Text(_unreadCount > 9 ? '9+' : '$_unreadCount'),
@@ -92,8 +89,23 @@ class _HomeScreenState extends State<HomeScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                firstName.isEmpty ? 'Welcome' : 'Hi, $firstName',
-                style: Theme.of(context).textTheme.headlineSmall,
+                _greeting(),
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textSecondary,
+                  letterSpacing: 0.3,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                firstName.isEmpty ? 'Welcome back' : firstName,
+                style: const TextStyle(
+                  fontSize: 26,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.textPrimary,
+                  letterSpacing: -0.5,
+                ),
               ),
               const SizedBox(height: AppSpacing.xs),
               Text(
@@ -119,16 +131,25 @@ class _HomeScreenState extends State<HomeScreen> {
                       end: Alignment.bottomRight,
                     ),
                     borderRadius: BorderRadius.circular(AppRadius.lg),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.primary.withValues(alpha: 0.35),
+                        blurRadius: 20,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
                   ),
                   child: Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.all(AppSpacing.sm),
+                        width: 52,
+                        height: 52,
+                        alignment: Alignment.center,
                         decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(AppRadius.md),
+                          color: Colors.white.withValues(alpha: 0.16),
+                          shape: BoxShape.circle,
                         ),
-                        child: const Icon(Icons.water_drop, color: Colors.white, size: 28),
+                        child: const Icon(Icons.water_drop, color: Colors.white, size: 26),
                       ),
                       const SizedBox(width: AppSpacing.md),
                       const Expanded(
@@ -141,6 +162,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 color: Colors.white,
                                 fontSize: 18,
                                 fontWeight: FontWeight.w700,
+                                letterSpacing: -0.2,
                               ),
                             ),
                             SizedBox(height: 2),
@@ -151,7 +173,16 @@ class _HomeScreenState extends State<HomeScreen> {
                           ],
                         ),
                       ),
-                      const Icon(Icons.arrow_forward_ios, color: Colors.white70, size: 16),
+                      Container(
+                        width: 28,
+                        height: 28,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.16),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.arrow_forward, color: Colors.white, size: 15),
+                      ),
                     ],
                   ),
                 ),
@@ -177,17 +208,25 @@ class _HomeScreenState extends State<HomeScreen> {
                   decoration: BoxDecoration(
                     color: AppColors.surface,
                     borderRadius: BorderRadius.circular(AppRadius.lg),
-                    border: Border.all(color: AppColors.border),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.textPrimary.withValues(alpha: 0.05),
+                        blurRadius: 16,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
                   ),
                   child: Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.all(AppSpacing.sm),
+                        width: 52,
+                        height: 52,
+                        alignment: Alignment.center,
                         decoration: BoxDecoration(
                           color: AppColors.primary.withValues(alpha: 0.08),
-                          borderRadius: BorderRadius.circular(AppRadius.md),
+                          shape: BoxShape.circle,
                         ),
-                        child: const Icon(Icons.receipt_long_outlined, color: AppColors.primary, size: 28),
+                        child: const Icon(Icons.receipt_long_outlined, color: AppColors.primary, size: 24),
                       ),
                       const SizedBox(width: AppSpacing.md),
                       Expanded(
@@ -196,7 +235,12 @@ class _HomeScreenState extends State<HomeScreen> {
                           children: [
                             Text(
                               'My Orders',
-                              style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 16),
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.textPrimary,
+                                letterSpacing: -0.2,
+                              ),
                             ),
                             const SizedBox(height: 2),
                             Text(
@@ -206,7 +250,16 @@ class _HomeScreenState extends State<HomeScreen> {
                           ],
                         ),
                       ),
-                      const Icon(Icons.arrow_forward_ios, color: AppColors.textSecondary, size: 16),
+                      Container(
+                        width: 28,
+                        height: 28,
+                        alignment: Alignment.center,
+                        decoration: const BoxDecoration(
+                          color: AppColors.background,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.arrow_forward, color: AppColors.textSecondary, size: 15),
+                      ),
                     ],
                   ),
                 ),
