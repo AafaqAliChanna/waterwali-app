@@ -39,14 +39,22 @@ class AuthGate extends StatefulWidget {
 }
 
 class _AuthGateState extends State<AuthGate> {
-  @override
+    @override
   void initState() {
     super.initState();
     final auth = Provider.of<AuthProvider>(context, listen: false);
     // Any service that hits a 401 calls this, forcing an immediate logout
     // no matter which screen the user happens to be on at the time.
     SessionManager.onSessionExpired = auth.logout;
-    auth.tryAutoLogin();
+
+    // Auto-login can resolve almost instantly (no saved token) or after a
+    // real network round trip (validating a saved token) — without a
+    // minimum wait, the splash screen would just flash for a single frame
+    // in the fast case instead of actually being visible.
+    Future.wait([
+      auth.tryAutoLogin(),
+      Future.delayed(const Duration(seconds: 2)),
+    ]);
   }
 
   @override
