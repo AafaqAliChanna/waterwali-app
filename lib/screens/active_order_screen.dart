@@ -168,6 +168,24 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
     _locationSocket.disconnect();
   }
 
+  Future<void> _openExternalNavigation(double lat, double lng) async {
+    final geoUri = Uri.parse('geo:$lat,$lng?q=$lat,$lng(Delivery+Location)');
+    if (await canLaunchUrl(geoUri)) {
+      await launchUrl(geoUri);
+      return;
+    }
+    // Fallback for devices with no maps app registered for geo: — opens in
+    // the browser instead, which always works.
+    final webUri = Uri.parse('https://www.google.com/maps/search/?api=1&query=$lat,$lng');
+    if (await canLaunchUrl(webUri)) {
+      await launchUrl(webUri, mode: LaunchMode.externalApplication);
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open navigation.')),
+      );
+    }
+  }
+
   Future<void> _callOtherParty() async {
     final phone = _isDriver ? _order!.customerPhone : _order!.driverPhone;
     if (phone == null) return;
@@ -338,8 +356,10 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
   Widget _buildOrderDetails() {
     final order = _order!;
     final otherPhone = _isDriver ? order.customerPhone : order.driverPhone;
-    final showLiveMap =
+        final showCustomerLiveMap =
         !_isDriver && (order.status == 'ACCEPTED' || order.status == 'IN_PROGRESS');
+    final showDriverDestinationMap =
+        _isDriver && (order.status == 'ACCEPTED' || order.status == 'IN_PROGRESS');
     final canMarkDelivered = _isDriver &&
         ((order.status == 'ACCEPTED' && order.confirmedAt != null) ||
             order.status == 'IN_PROGRESS');
@@ -377,9 +397,13 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
             ),
           ),
         ),
-        if (showLiveMap) ...[
+                if (showCustomerLiveMap) ...[
           const SizedBox(height: AppSpacing.md),
           _buildLiveMap(order),
+        ],
+        if (showDriverDestinationMap) ...[
+          const SizedBox(height: AppSpacing.md),
+          _buildDestinationMap(order),
         ],
         const SizedBox(height: AppSpacing.md),
         if (otherPhone != null) ...[
@@ -666,6 +690,49 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
       ),
     );
   }
+  Widget _buildDestinationMap(Order order) {
+    final destination = ll.LatLng(order.latitude, order.longitude);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          child: SizedBox(
+            height: 200,
+            child: FlutterMap(
+              options: MapOptions(
+                initialCenter: destination,
+                initialZoom: 15,
+              ),
+              children: [
+                TileLayer(
+                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  userAgentPackageName: 'com.example.waterwali_app',
+                ),
+                MarkerLayer(
+                  markers: [
+                    Marker(
+                      point: destination,
+                      width: 36,
+                      height: 36,
+                      child: const Icon(Icons.location_pin, color: AppColors.danger, size: 34),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        OutlinedButton.icon(
+          onPressed: () => _openExternalNavigation(order.latitude, order.longitude),
+          icon: const Icon(Icons.directions),
+          label: const Text('Navigate to Customer'),
+        ),
+      ],
+    );
+  }
+
 }
 
 // A 4-step horizontal progress tracker: Pending → Accepted → On the way →
