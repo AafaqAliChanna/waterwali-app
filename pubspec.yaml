@@ -10,12 +10,13 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-
   cupertino_icons: ^1.0.8
   http: ^1.6.0
   flutter_secure_storage: ^10.3.1
   provider: ^6.1.5+1
   font_awesome_flutter: ^11.0.0
+  flutter_tts: ^4.2.0
+  showcaseview: ^4.0.1
 
   # Added for Phase A — customer order placement
   flutter_map: ^7.0.2
