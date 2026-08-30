@@ -7,6 +7,9 @@ import 'screens/driver_home_screen.dart';
 import 'screens/splash_screen.dart';
 import 'services/session_manager.dart';
 import 'theme/app_theme.dart';
+import 'package:showcaseview/showcaseview.dart';
+import 'services/onboarding_narrator.dart';
+import 'services/voice_guide_service.dart';
 
 void main() {
   runApp(
@@ -21,11 +24,23 @@ class MyApp extends StatelessWidget {
   const MyApp({super.key});
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'WaterWali',
-      theme: AppTheme.light,
-      home: const AuthGate(),
+            return ShowCaseWidget(
+      onStart: (index, key) {
+        final text = OnboardingNarrator.textFor(key);
+        if (text != null) VoiceGuideService().speak(text);
+      },
+      onComplete: (index, key) {
+        if (key == OnboardingNarrator.lastKey) {
+          OnboardingNarrator.onFinished?.call();
+          OnboardingNarrator.clear();
+        }
+      },
+      builder: (context) => MaterialApp(
+        debugShowCheckedModeBanner: false,
+        title: 'WaterWali',
+        theme: AppTheme.light,
+        home: const AuthGate(),
+      ),
     );
   }
 }
