@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:provider/provider.dart';
+import 'package:showcaseview/showcaseview.dart';
 import '../models/order_model.dart';
 import '../models/wallet_model.dart';
 import '../services/driver_service.dart';
 import '../services/wallet_service.dart';
 import '../services/auth_provider.dart';
 import '../services/notification_service.dart';
+import '../services/onboarding_service.dart';
+import '../services/onboarding_narrator.dart';
+import '../services/voice_guide_service.dart';
 import '../theme/app_theme.dart';
 import 'order_history_screen.dart';
 import 'active_order_screen.dart';
@@ -38,6 +42,11 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   final Set<String> _acceptingOrderIds = {};
   String? _ordersError;
 
+  final _walletCardKey = GlobalKey();
+  final _onlineToggleKey = GlobalKey();
+  final _historyIconKey = GlobalKey();
+  bool _tourActive = false;
+
   String? get _token =>
       Provider.of<AuthProvider>(context, listen: false).token;
 
@@ -46,6 +55,38 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     super.initState();
     _loadWallet();
     _loadUnreadCount();
+  }
+
+  Future<void> _maybeStartTour() async {
+    final seen = await OnboardingService.hasSeen('driver_home');
+    if (seen || !mounted) return;
+
+    OnboardingNarrator.register(
+      narrations: {
+        _walletCardKey:
+            'This is your wallet. Keep at least 200 rupees here to go online, and top up any time.',
+        _onlineToggleKey:
+            'Flip this switch to go online. Once you are online, nearby delivery orders will appear here for you to accept.',
+        _historyIconKey: 'Tap here to see your past and current deliveries.',
+      },
+      lastKey: _historyIconKey,
+      onFinished: () async {
+        await OnboardingService.markSeen('driver_home');
+        if (mounted) setState(() => _tourActive = false);
+      },
+    );
+
+    setState(() => _tourActive = true);
+    ShowCaseWidget.of(context)
+        .startShowCase([_walletCardKey, _onlineToggleKey, _historyIconKey]);
+  }
+
+  void _skipTour() {
+    ShowCaseWidget.of(context).dismiss();
+    VoiceGuideService().stop();
+    OnboardingService.markSeen('driver_home');
+    OnboardingNarrator.clear();
+    setState(() => _tourActive = false);
   }
 
   Future<void> _loadUnreadCount() async {
@@ -80,6 +121,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
         _isLoadingWallet = false;
       });
       if (wallet.isOnline) _loadNearbyOrders();
+      // Tour can only start once the wallet card actually renders — wait
+      // one frame after this rebuild so the Showcase keys are attached.
+      WidgetsBinding.instance.addPostFrameCallback((_) => _maybeStartTour());
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -262,6 +306,12 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   }
 
   @override
+  void dispose() {
+    VoiceGuideService().stop();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final auth = Provider.of<AuthProvider>(context, listen: false);
     final name = auth.name?.trim().isNotEmpty == true ? auth.name!.trim() : 'Driver';
@@ -299,19 +349,24 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                 ),
             ],
           ),
-          IconButton(
-            icon: const Icon(Icons.history),
-            tooltip: 'My Deliveries',
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (context) => OrderHistoryScreen(
-                    title: 'My Deliveries',
-                    fetchOrders: (token) => _driverService.myOrders(token),
+          Showcase(
+            key: _historyIconKey,
+            description:
+                'See your past and current deliveries here.\nیہاں اپنی پرانی اور موجودہ ڈیلیوریز دیکھیں۔',
+            child: IconButton(
+              icon: const Icon(Icons.history),
+              tooltip: 'My Deliveries',
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => OrderHistoryScreen(
+                      title: 'My Deliveries',
+                      fetchOrders: (token) => _driverService.myOrders(token),
+                    ),
                   ),
-                ),
-              );
-            },
+                );
+              },
+            ),
           ),
           IconButton(
             icon: const Icon(Icons.settings_outlined),
@@ -345,48 +400,78 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                     ),
                   ),
                 )
-              : RefreshIndicator(
-                  onRefresh: _loadNearbyOrders,
-                  child: ListView(
-                    padding: const EdgeInsets.all(AppSpacing.md),
-                    children: [
-                      Row(
+              : Stack(
+                  children: [
+                    RefreshIndicator(
+                      onRefresh: _loadNearbyOrders,
+                      child: ListView(
+                        padding: const EdgeInsets.all(AppSpacing.md),
                         children: [
-                          CircleAvatar(
-                            radius: 22,
-                            backgroundColor: AppColors.primary,
-                            child: Text(
-                              initial,
-                              style: const TextStyle(
-                                  color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700),
-                            ),
+                          Row(
+                            children: [
+                              CircleAvatar(
+                                radius: 22,
+                                backgroundColor: AppColors.primary,
+                                child: Text(
+                                  initial,
+                                  style: const TextStyle(
+                                      color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700),
+                                ),
+                              ),
+                              const SizedBox(width: AppSpacing.sm),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(_greeting(),
+                                        style: Theme.of(context).textTheme.bodySmall),
+                                    Text(name,
+                                        style: const TextStyle(
+                                            fontSize: 17, fontWeight: FontWeight.w700)),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(width: AppSpacing.sm),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(_greeting(),
-                                    style: Theme.of(context).textTheme.bodySmall),
-                                Text(name,
-                                    style: const TextStyle(
-                                        fontSize: 17, fontWeight: FontWeight.w700)),
-                              ],
-                            ),
+                          const SizedBox(height: AppSpacing.lg),
+                          Showcase(
+                            key: _walletCardKey,
+                            description:
+                                'This is your wallet. Keep at least PKR 200 here to go online.\nیہ آپ کا والٹ ہے۔ آن لائن ہونے کے لیے کم از کم 200 روپے رکھیں۔',
+                            child: _buildWalletCard(),
                           ),
+                          const SizedBox(height: AppSpacing.md),
+                          Showcase(
+                            key: _onlineToggleKey,
+                            description:
+                                'Flip this switch to go online and start receiving nearby orders.\nآرڈرز حاصل کرنے کے لیے یہ سوئچ آن کریں۔',
+                            child: _buildOnlineToggleCard(),
+                          ),
+                          const SizedBox(height: AppSpacing.lg),
+                          if (_wallet!.isOnline)
+                            _buildNearbyOrdersSection()
+                          else
+                            _buildOfflinePrompt(),
                         ],
                       ),
-                      const SizedBox(height: AppSpacing.lg),
-                      _buildWalletCard(),
-                      const SizedBox(height: AppSpacing.md),
-                      _buildOnlineToggleCard(),
-                      const SizedBox(height: AppSpacing.lg),
-                      if (_wallet!.isOnline)
-                        _buildNearbyOrdersSection()
-                      else
-                        _buildOfflinePrompt(),
-                    ],
-                  ),
+                    ),
+                    if (_tourActive)
+                      Positioned(
+                        top: AppSpacing.sm,
+                        right: AppSpacing.sm,
+                        child: SafeArea(
+                          child: TextButton.icon(
+                            onPressed: _skipTour,
+                            icon: const Icon(Icons.close, size: 16),
+                            label: const Text('Skip'),
+                            style: TextButton.styleFrom(
+                              backgroundColor: AppColors.surface,
+                              foregroundColor: AppColors.textSecondary,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
     );
   }
