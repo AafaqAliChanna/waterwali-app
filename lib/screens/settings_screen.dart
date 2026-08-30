@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:showcaseview/showcaseview.dart';
 import '../services/auth_provider.dart';
+import '../services/onboarding_service.dart';
+import '../services/onboarding_narrator.dart';
+import '../services/voice_guide_service.dart';
 import '../theme/app_theme.dart';
 import 'about_screen.dart';
 import '../data/legal_content.dart';
@@ -20,10 +24,47 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String? _refreshError;
   bool _isDeleting = false;
 
+  final _profileCardKey = GlobalKey();
+  final _settingsListKey = GlobalKey();
+  final _dangerZoneKey = GlobalKey();
+  bool _tourActive = false;
+
   @override
   void initState() {
     super.initState();
     _refresh();
+  }
+
+  Future<void> _maybeStartTour() async {
+    final seen = await OnboardingService.hasSeen('settings');
+    if (seen || !mounted) return;
+
+    OnboardingNarrator.register(
+      narrations: {
+        _profileCardKey: 'This shows your account details.',
+        _settingsListKey:
+            'Here you can edit your name, email, and view our terms and policies.',
+        _dangerZoneKey:
+            'Be careful here — deleting your account permanently erases your data and cannot be undone.',
+      },
+      lastKey: _dangerZoneKey,
+      onFinished: () async {
+        await OnboardingService.markSeen('settings');
+        if (mounted) setState(() => _tourActive = false);
+      },
+    );
+
+    setState(() => _tourActive = true);
+    ShowCaseWidget.of(context)
+        .startShowCase([_profileCardKey, _settingsListKey, _dangerZoneKey]);
+  }
+
+  void _skipTour() {
+    ShowCaseWidget.of(context).dismiss();
+    VoiceGuideService().stop();
+    OnboardingService.markSeen('settings');
+    OnboardingNarrator.clear();
+    setState(() => _tourActive = false);
   }
 
   Future<void> _refresh() async {
@@ -35,6 +76,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await Provider.of<AuthProvider>(context, listen: false).refreshProfile();
       if (!mounted) return;
       setState(() => _isRefreshing = false);
+      WidgetsBinding.instance.addPostFrameCallback((_) => _maybeStartTour());
     } catch (e) {
       if (!mounted) return;
       // Non-fatal — we still have whatever the provider already had cached
@@ -43,6 +85,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _isRefreshing = false;
         _refreshError = 'Could not refresh profile. Showing last known info.';
       });
+      WidgetsBinding.instance.addPostFrameCallback((_) => _maybeStartTour());
     }
   }
 
@@ -65,7 +108,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ],
       ),
     );
-        if (confirmed != true) return;
+    if (confirmed != true) return;
     await auth.logout();
     if (!mounted) return;
     // logout() swaps AuthGate's content to LoginScreen underneath, but
@@ -132,7 +175,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (!mounted) return;
     setState(() => _isDeleting = false);
 
-        if (!success) {
+    if (!success) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(auth.errorMessage ?? 'Could not delete account. Please try again.'),
@@ -148,6 +191,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   @override
+  void dispose() {
+    VoiceGuideService().stop();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final auth = Provider.of<AuthProvider>(context);
     final displayName = auth.name?.trim() ?? '';
@@ -155,167 +204,202 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
-      body: ListView(
-        padding: const EdgeInsets.all(AppSpacing.md),
+      body: Stack(
         children: [
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(AppSpacing.md),
-              child: Row(
-                children: [
-                  CircleAvatar(
-                    radius: 28,
-                    backgroundColor: AppColors.primary,
-                    child: Text(
-                      initial,
-                      style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700),
-                    ),
-                  ),
-                  const SizedBox(width: AppSpacing.md),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+          ListView(
+            padding: const EdgeInsets.all(AppSpacing.md),
+            children: [
+              Showcase(
+                key: _profileCardKey,
+                description:
+                    'This shows your account details.\nیہاں آپ کی اکاؤنٹ کی تفصیلات ہیں۔',
+                child: Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(AppSpacing.md),
+                    child: Row(
                       children: [
-                                                Text(
-                          displayName.isNotEmpty ? displayName : 'WaterWali User',
-                          style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
-                        ),
-                        const SizedBox(height: 2),
-                        if (_isRefreshing)
-                          Text('Loading...', style: Theme.of(context).textTheme.bodySmall)
-                        else
-                          Text(
-                            auth.phone ?? 'Phone number unavailable',
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        const SizedBox(height: 4),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: AppColors.primary.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(AppRadius.pill),
-                          ),
+                        CircleAvatar(
+                          radius: 28,
+                          backgroundColor: AppColors.primary,
                           child: Text(
-                            auth.isDriver ? 'Driver' : 'Customer',
-                            style: const TextStyle(color: AppColors.primary, fontSize: 11, fontWeight: FontWeight.w700),
+                            initial,
+                            style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.md),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                displayName.isNotEmpty ? displayName : 'WaterWali User',
+                                style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+                              ),
+                              const SizedBox(height: 2),
+                              if (_isRefreshing)
+                                Text('Loading...', style: Theme.of(context).textTheme.bodySmall)
+                              else
+                                Text(
+                                  auth.phone ?? 'Phone number unavailable',
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                              const SizedBox(height: 4),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: AppColors.primary.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(AppRadius.pill),
+                                ),
+                                child: Text(
+                                  auth.isDriver ? 'Driver' : 'Customer',
+                                  style: const TextStyle(color: AppColors.primary, fontSize: 11, fontWeight: FontWeight.w700),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ],
                     ),
                   ),
-                ],
+                ),
+              ),
+              if (_refreshError != null) ...[
+                const SizedBox(height: AppSpacing.sm),
+                Text(_refreshError!, style: const TextStyle(color: AppColors.warning, fontSize: 12)),
+              ],
+              const SizedBox(height: AppSpacing.lg),
+
+              Showcase(
+                key: _settingsListKey,
+                description:
+                    'Edit your name, email, and view our terms and policies here.\nیہاں اپنا نام، ای میل تبدیل کریں اور شرائط پڑھیں۔',
+                child: Card(
+                  child: Column(
+                    children: [
+                      ListTile(
+                        leading: const Icon(Icons.badge_outlined),
+                        title: const Text('Edit Name'),
+                        trailing: const Icon(Icons.chevron_right, size: 20),
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(builder: (context) => const EditNameScreen()),
+                          );
+                        },
+                      ),
+                      const Divider(height: 1),
+                      ListTile(
+                        leading: const Icon(Icons.email_outlined),
+                        title: const Text('Email Address'),
+                        trailing: const Icon(Icons.chevron_right, size: 20),
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(builder: (context) => const EditEmailScreen()),
+                          );
+                        },
+                      ),
+                      const Divider(height: 1),
+                      ListTile(
+                        leading: const Icon(Icons.info_outline),
+                        title: const Text('About'),
+                        trailing: const Icon(Icons.chevron_right, size: 20),
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(builder: (context) => const AboutScreen()),
+                          );
+                        },
+                      ),
+                      const Divider(height: 1),
+                      ListTile(
+                        leading: const Icon(Icons.description_outlined),
+                        title: const Text('Terms of Service'),
+                        trailing: const Icon(Icons.chevron_right, size: 20),
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (context) => const LegalDocumentScreen(
+                                title: 'Terms of Service',
+                                content: termsOfServiceText,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                      const Divider(height: 1),
+                      ListTile(
+                        leading: const Icon(Icons.privacy_tip_outlined),
+                        title: const Text('Privacy Policy'),
+                        trailing: const Icon(Icons.chevron_right, size: 20),
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (context) => const LegalDocumentScreen(
+                                title: 'Privacy Policy',
+                                content: privacyPolicyText,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                      const Divider(height: 1),
+                      ListTile(
+                        leading: const Icon(Icons.logout_outlined),
+                        title: const Text('Logout'),
+                        trailing: const Icon(Icons.chevron_right, size: 20),
+                        onTap: _confirmLogout,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: AppSpacing.lg),
+              Text(
+                'DANGER ZONE',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.danger.withValues(alpha: 0.8),
+                  letterSpacing: 0.5,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Showcase(
+                key: _dangerZoneKey,
+                description:
+                    'Be careful here — deleting your account is permanent and cannot be undone.\nیہاں احتیاط کریں — اکاؤنٹ ڈیلیٹ کرنا مستقل ہے۔',
+                child: Card(
+                  child: ListTile(
+                    leading: _isDeleting
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.danger),
+                          )
+                        : const Icon(Icons.delete_forever_outlined, color: AppColors.danger),
+                    title: const Text('Delete Account', style: TextStyle(color: AppColors.danger)),
+                    subtitle: const Text('Permanently erase your account and data'),
+                    onTap: _isDeleting ? null : _confirmDeleteAccount,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (_tourActive)
+            Positioned(
+              top: AppSpacing.sm,
+              right: AppSpacing.sm,
+              child: SafeArea(
+                child: TextButton.icon(
+                  onPressed: _skipTour,
+                  icon: const Icon(Icons.close, size: 16),
+                  label: const Text('Skip'),
+                  style: TextButton.styleFrom(
+                    backgroundColor: AppColors.surface,
+                    foregroundColor: AppColors.textSecondary,
+                  ),
+                ),
               ),
             ),
-          ),
-          if (_refreshError != null) ...[
-            const SizedBox(height: AppSpacing.sm),
-            Text(_refreshError!, style: const TextStyle(color: AppColors.warning, fontSize: 12)),
-          ],
-          const SizedBox(height: AppSpacing.lg),
-
-                    Card(
-            child: Column(
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.badge_outlined),
-                  title: const Text('Edit Name'),
-                  trailing: const Icon(Icons.chevron_right, size: 20),
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(builder: (context) => const EditNameScreen()),
-                    );
-                  },
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(Icons.email_outlined),
-                  title: const Text('Email Address'),
-                  trailing: const Icon(Icons.chevron_right, size: 20),
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(builder: (context) => const EditEmailScreen()),
-                    );
-                  },
-                ),
-                const Divider(height: 1),
-                                ListTile(
-                  leading: const Icon(Icons.info_outline),
-                  title: const Text('About'),
-                  trailing: const Icon(Icons.chevron_right, size: 20),
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(builder: (context) => const AboutScreen()),
-                    );
-                  },
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(Icons.description_outlined),
-                  title: const Text('Terms of Service'),
-                  trailing: const Icon(Icons.chevron_right, size: 20),
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (context) => const LegalDocumentScreen(
-                          title: 'Terms of Service',
-                          content: termsOfServiceText,
-                        ),
-                      ),
-                    );
-                  },
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(Icons.privacy_tip_outlined),
-                  title: const Text('Privacy Policy'),
-                  trailing: const Icon(Icons.chevron_right, size: 20),
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (context) => const LegalDocumentScreen(
-                          title: 'Privacy Policy',
-                          content: privacyPolicyText,
-                        ),
-                      ),
-                    );
-                  },
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(Icons.logout_outlined),
-                  title: const Text('Logout'),
-                  trailing: const Icon(Icons.chevron_right, size: 20),
-                  onTap: _confirmLogout,
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: AppSpacing.lg),
-          Text(
-            'DANGER ZONE',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: AppColors.danger.withValues(alpha: 0.8),
-              letterSpacing: 0.5,
-            ),
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Card(
-            child: ListTile(
-              leading: _isDeleting
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.danger),
-                    )
-                  : const Icon(Icons.delete_forever_outlined, color: AppColors.danger),
-              title: const Text('Delete Account', style: TextStyle(color: AppColors.danger)),
-              subtitle: const Text('Permanently erase your account and data'),
-              onTap: _isDeleting ? null : _confirmDeleteAccount,
-            ),
-          ),
         ],
       ),
     );
