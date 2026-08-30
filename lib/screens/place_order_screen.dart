@@ -5,9 +5,13 @@ import 'package:latlong2/latlong.dart' as ll;
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:provider/provider.dart';
+import 'package:showcaseview/showcaseview.dart';
 import '../models/order_model.dart';
 import '../services/order_service.dart';
 import '../services/auth_provider.dart';
+import '../services/onboarding_service.dart';
+import '../services/onboarding_narrator.dart';
+import '../services/voice_guide_service.dart';
 import '../theme/app_theme.dart';
 import 'active_order_screen.dart';
 
@@ -19,7 +23,7 @@ class PlaceOrderScreen extends StatefulWidget {
 }
 
 class _PlaceOrderScreenState extends State<PlaceOrderScreen> {
-    final OrderService _orderService = OrderService();
+  final OrderService _orderService = OrderService();
   final MapController _mapController = MapController();
   Timer? _idleDebounce;
 
@@ -43,10 +47,46 @@ class _PlaceOrderScreenState extends State<PlaceOrderScreen> {
   bool _addressUnavailable = false;
   int _addressRequestId = 0;
 
+  final _addressPillKey = GlobalKey();
+  final _tankerSizeKey = GlobalKey();
+  final _placeOrderButtonKey = GlobalKey();
+  bool _tourActive = false;
+
   @override
   void initState() {
     super.initState();
     _determinePosition();
+  }
+
+  Future<void> _maybeStartTour() async {
+    final seen = await OnboardingService.hasSeen('place_order');
+    if (seen || !mounted) return;
+
+    OnboardingNarrator.register(
+      narrations: {
+        _addressPillKey:
+            'This shows your delivery address. Drag the map so the pin marks exactly where you want your water delivered.',
+        _tankerSizeKey: 'Choose how much water you need here.',
+        _placeOrderButtonKey: 'When you are ready, tap here to place your order.',
+      },
+      lastKey: _placeOrderButtonKey,
+      onFinished: () async {
+        await OnboardingService.markSeen('place_order');
+        if (mounted) setState(() => _tourActive = false);
+      },
+    );
+
+    setState(() => _tourActive = true);
+    ShowCaseWidget.of(context)
+        .startShowCase([_addressPillKey, _tankerSizeKey, _placeOrderButtonKey]);
+  }
+
+  void _skipTour() {
+    ShowCaseWidget.of(context).dismiss();
+    VoiceGuideService().stop();
+    OnboardingService.markSeen('place_order');
+    OnboardingNarrator.clear();
+    setState(() => _tourActive = false);
   }
 
   Future<void> _determinePosition() async {
@@ -84,12 +124,15 @@ class _PlaceOrderScreenState extends State<PlaceOrderScreen> {
         ),
       );
 
-            if (!mounted) return;
+      if (!mounted) return;
       setState(() {
         _selectedLocation = ll.LatLng(position.latitude, position.longitude);
         _isLoadingLocation = false;
       });
       _reverseGeocode(_selectedLocation!);
+      // Tour can only start once the map/form actually exists on screen —
+      // wait one frame after this rebuild so the Showcase keys are attached.
+      WidgetsBinding.instance.addPostFrameCallback((_) => _maybeStartTour());
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -99,7 +142,24 @@ class _PlaceOrderScreenState extends State<PlaceOrderScreen> {
     }
   }
 
-    // flutter_map fires this continuously while dragging, with no built-in
+  Future<void> _recenterOnMyLocation() async {
+    try {
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+      );
+      final here = ll.LatLng(position.latitude, position.longitude);
+      _mapController.move(here, _mapController.camera.zoom);
+      setState(() => _selectedLocation = here);
+      _reverseGeocode(here);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not get your current location.')),
+      );
+    }
+  }
+
+  // flutter_map fires this continuously while dragging, with no built-in
   // "camera idle" event like Google Maps had. We fake one with a short
   // debounce: every move restarts a 400ms timer, and only once the map has
   // been still that long do we actually look up the address — otherwise a
@@ -239,7 +299,6 @@ class _PlaceOrderScreenState extends State<PlaceOrderScreen> {
           builder: (context) => ActiveOrderScreen(orderId: order.id, initialOrder: order),
         ),
       );
-
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -290,101 +349,146 @@ class _PlaceOrderScreenState extends State<PlaceOrderScreen> {
   }
 
   Widget _buildMapAndForm() {
-    return Column(
+    return Stack(
       children: [
-        // Map takes the top portion of the screen; the pin is drawn as a
-        // fixed overlay so it always points at the exact map center.
-        Expanded(
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              FlutterMap(
-                mapController: _mapController,
-                options: MapOptions(
-                  initialCenter: _selectedLocation!,
-                  initialZoom: 16,
-                  onPositionChanged: _onPositionChanged,
-                ),
+        Column(
+          children: [
+            // Map takes the top portion of the screen; the pin is drawn as a
+            // fixed overlay so it always points at the exact map center.
+            Expanded(
+              child: Stack(
+                alignment: Alignment.center,
                 children: [
-                  TileLayer(
-                    urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                    userAgentPackageName: 'com.example.waterwali_app',
+                  FlutterMap(
+                    mapController: _mapController,
+                    options: MapOptions(
+                      initialCenter: _selectedLocation!,
+                      initialZoom: 16,
+                      onPositionChanged: _onPositionChanged,
+                    ),
+                    children: [
+                      TileLayer(
+                        urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                        userAgentPackageName: 'com.example.waterwali_app',
+                      ),
+                    ],
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 36),
+                    child: Icon(
+                      Icons.location_pin,
+                      size: 44,
+                      color: AppColors.danger,
+                    ),
+                  ),
+                  Positioned(
+                    top: AppSpacing.md,
+                    left: AppSpacing.md,
+                    right: AppSpacing.md,
+                    child: Showcase(
+                      key: _addressPillKey,
+                      description:
+                          'This is your delivery address. Drag the map so the pin marks exactly where you want your water delivered.\nیہ آپ کا ڈیلیوری پتہ ہے۔ نقشے کو حرکت دے کر پن کو صحیح جگہ پر رکھیں۔',
+                      child: _buildAddressPill(),
+                    ),
+                  ),
+                  Positioned(
+                    bottom: 16,
+                    right: 16,
+                    child: FloatingActionButton.small(
+                      heroTag: 'recenter',
+                      backgroundColor: Colors.white,
+                      onPressed: _recenterOnMyLocation,
+                      child: const Icon(Icons.my_location, color: AppColors.primary),
+                    ),
                   ),
                 ],
               ),
-              const Padding(
-                padding: EdgeInsets.only(bottom: 36),
-                child: Icon(
-                  Icons.location_pin,
-                  size: 44,
-                  color: AppColors.danger,
+            ),
+            // Order controls panel below the map.
+            Container(
+              decoration: const BoxDecoration(
+                color: AppColors.surface,
+                boxShadow: [
+                  BoxShadow(color: Colors.black12, blurRadius: 8, offset: Offset(0, -2)),
+                ],
+              ),
+              padding: const EdgeInsets.all(AppSpacing.md),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Tanker Size', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 16)),
+                  const SizedBox(height: AppSpacing.sm),
+                  Showcase(
+                    key: _tankerSizeKey,
+                    description:
+                        'Choose how much water you need.\nآپ کو کتنے پانی کی ضرورت ہے یہاں منتخب کریں۔',
+                    child: GridView.count(
+                      crossAxisCount: 2,
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      mainAxisSpacing: AppSpacing.sm,
+                      crossAxisSpacing: AppSpacing.sm,
+                      childAspectRatio: 2.4,
+                      children: TankerSize.values.map((size) {
+                        return _TankerSizeCard(
+                          size: size,
+                          selected: size == _selectedSize,
+                          onTap: () => setState(() => _selectedSize = size),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  Text(
+                    'Price is calculated automatically based on tanker size and distance.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  if (_orderError != null) ...[
+                    const SizedBox(height: AppSpacing.sm),
+                    Text(_orderError!, style: const TextStyle(color: AppColors.danger)),
+                  ],
+                  const SizedBox(height: AppSpacing.md),
+                  Showcase(
+                    key: _placeOrderButtonKey,
+                    description:
+                        'When you are ready, tap here to place your order.\nجب تیار ہوں تو آرڈر دینے کے لیے یہاں ٹیپ کریں۔',
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: _isPlacingOrder ? null : _confirmAndPlaceOrder,
+                        child: _isPlacingOrder
+                            ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                              )
+                            : const Text('PLACE ORDER'),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        if (_tourActive)
+          Positioned(
+            top: AppSpacing.sm,
+            right: AppSpacing.sm,
+            child: SafeArea(
+              child: TextButton.icon(
+                onPressed: _skipTour,
+                icon: const Icon(Icons.close, size: 16),
+                label: const Text('Skip'),
+                style: TextButton.styleFrom(
+                  backgroundColor: AppColors.surface,
+                  foregroundColor: AppColors.textSecondary,
                 ),
               ),
-              Positioned(
-                top: AppSpacing.md,
-                left: AppSpacing.md,
-                right: AppSpacing.md,
-                child: _buildAddressPill(),
-              ),
-            ],
+            ),
           ),
-        ),
-        // Order controls panel below the map.
-        Container(
-          decoration: const BoxDecoration(
-            color: AppColors.surface,
-            boxShadow: [
-              BoxShadow(color: Colors.black12, blurRadius: 8, offset: Offset(0, -2)),
-            ],
-          ),
-          padding: const EdgeInsets.all(AppSpacing.md),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Tanker Size', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 16)),
-              const SizedBox(height: AppSpacing.sm),
-              GridView.count(
-                crossAxisCount: 2,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                mainAxisSpacing: AppSpacing.sm,
-                crossAxisSpacing: AppSpacing.sm,
-                childAspectRatio: 2.4,
-                children: TankerSize.values.map((size) {
-                  return _TankerSizeCard(
-                    size: size,
-                    selected: size == _selectedSize,
-                    onTap: () => setState(() => _selectedSize = size),
-                  );
-                }).toList(),
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              Text(
-                'Price is calculated automatically based on tanker size and distance.',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              if (_orderError != null) ...[
-                const SizedBox(height: AppSpacing.sm),
-                Text(_orderError!, style: const TextStyle(color: AppColors.danger)),
-              ],
-              const SizedBox(height: AppSpacing.md),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: _isPlacingOrder ? null : _confirmAndPlaceOrder,
-                  child: _isPlacingOrder
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                        )
-                      : const Text('PLACE ORDER'),
-                ),
-              ),
-            ],
-          ),
-        ),
       ],
     );
   }
@@ -423,6 +527,7 @@ class _PlaceOrderScreenState extends State<PlaceOrderScreen> {
   @override
   void dispose() {
     _idleDebounce?.cancel();
+    VoiceGuideService().stop();
     super.dispose();
   }
 }
