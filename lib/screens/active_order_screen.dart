@@ -5,11 +5,15 @@ import 'package:latlong2/latlong.dart' as ll;
 import 'package:geolocator/geolocator.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:showcaseview/showcaseview.dart';
 import '../models/order_model.dart';
 import '../services/order_service.dart';
 import '../services/driver_service.dart';
 import '../services/auth_provider.dart';
 import '../services/location_socket_service.dart';
+import '../services/onboarding_service.dart';
+import '../services/onboarding_narrator.dart';
+import '../services/voice_guide_service.dart';
 import '../theme/app_theme.dart';
 import 'chat_screen.dart';
 import 'driver_profile_screen.dart';
@@ -48,6 +52,12 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
   Timer? _cancelWindowTimer;
   int _cancelSecondsRemaining = 0;
 
+  // Only 2 elements are stable enough across every order status to safely
+  // tour — see the note where this is started for why.
+  final _timelineKey = GlobalKey();
+  final _reportProblemKey = GlobalKey();
+  bool _tourActive = false;
+
   String? get _token => Provider.of<AuthProvider>(context, listen: false).token;
   bool get _isDriver => Provider.of<AuthProvider>(context, listen: false).isDriver;
 
@@ -59,9 +69,43 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
       _isLoading = false;
       _syncLocationTracking();
       _syncCancelWindowTimer();
+      WidgetsBinding.instance.addPostFrameCallback((_) => _maybeStartTour());
     } else {
       _loadOrder();
     }
+  }
+
+  Future<void> _maybeStartTour() async {
+    final seen = await OnboardingService.hasSeen('active_order');
+    if (seen || !mounted || _order == null) return;
+
+    final showTimeline = _order!.status != 'CANCELLED';
+    final narrations = <GlobalKey, String>{
+      if (showTimeline)
+        _timelineKey: 'This shows your order\'s progress, from pending to delivered.',
+      _reportProblemKey: 'If anything goes wrong with this order, tap here to report it.',
+    };
+    if (narrations.isEmpty) return;
+
+    OnboardingNarrator.register(
+      narrations: narrations,
+      lastKey: _reportProblemKey,
+      onFinished: () async {
+        await OnboardingService.markSeen('active_order');
+        if (mounted) setState(() => _tourActive = false);
+      },
+    );
+
+    setState(() => _tourActive = true);
+    ShowCaseWidget.of(context).startShowCase(narrations.keys.toList());
+  }
+
+  void _skipTour() {
+    ShowCaseWidget.of(context).dismiss();
+    VoiceGuideService().stop();
+    OnboardingService.markSeen('active_order');
+    OnboardingNarrator.clear();
+    setState(() => _tourActive = false);
   }
 
   Future<void> _loadOrder() async {
@@ -78,6 +122,7 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
       });
       _syncLocationTracking();
       _syncCancelWindowTimer();
+      WidgetsBinding.instance.addPostFrameCallback((_) => _maybeStartTour());
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -99,9 +144,6 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
     }
   }
 
-  // Drives the live "Cancel Order (27s)" countdown shown to the customer
-  // during the 30s window after driver confirmation. Restarts cleanly
-  // whenever the order data changes (confirm/cancel/reload).
   void _syncCancelWindowTimer() {
     _cancelWindowTimer?.cancel();
     final deadlineStr = _order?.cancelDeadline;
@@ -174,8 +216,6 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
       await launchUrl(geoUri);
       return;
     }
-    // Fallback for devices with no maps app registered for geo: — opens in
-    // the browser instead, which always works.
     final webUri = Uri.parse('https://www.google.com/maps/search/?api=1&query=$lat,$lng');
     if (await canLaunchUrl(webUri)) {
       await launchUrl(webUri, mode: LaunchMode.externalApplication);
@@ -321,6 +361,7 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
   void dispose() {
     _stopLocationTracking();
     _cancelWindowTimer?.cancel();
+    VoiceGuideService().stop();
     super.dispose();
   }
 
@@ -349,14 +390,34 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
                     ),
                   ),
                 )
-              : _buildOrderDetails(),
+              : Stack(
+                  children: [
+                    _buildOrderDetails(),
+                    if (_tourActive)
+                      Positioned(
+                        top: AppSpacing.sm,
+                        right: AppSpacing.sm,
+                        child: SafeArea(
+                          child: TextButton.icon(
+                            onPressed: _skipTour,
+                            icon: const Icon(Icons.close, size: 16),
+                            label: const Text('Skip'),
+                            style: TextButton.styleFrom(
+                              backgroundColor: AppColors.surface,
+                              foregroundColor: AppColors.textSecondary,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
     );
   }
 
   Widget _buildOrderDetails() {
     final order = _order!;
     final otherPhone = _isDriver ? order.customerPhone : order.driverPhone;
-        final showCustomerLiveMap =
+    final showCustomerLiveMap =
         !_isDriver && (order.status == 'ACCEPTED' || order.status == 'IN_PROGRESS');
     final showDriverDestinationMap =
         _isDriver && (order.status == 'ACCEPTED' || order.status == 'IN_PROGRESS');
@@ -392,12 +453,17 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
                 if (order.status == 'CANCELLED')
                   _buildCancelledBanner()
                 else
-                  _OrderStatusTimeline(status: order.status),
+                  Showcase(
+                    key: _timelineKey,
+                    description:
+                        'This shows your order\'s progress, from pending to delivered.\nیہ آپ کے آرڈر کی پیش رفت دکھاتا ہے۔',
+                    child: _OrderStatusTimeline(status: order.status),
+                  ),
               ],
             ),
           ),
         ),
-                if (showCustomerLiveMap) ...[
+        if (showCustomerLiveMap) ...[
           const SizedBox(height: AppSpacing.md),
           _buildLiveMap(order),
         ],
@@ -467,8 +533,6 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
             ),
           ),
 
-        // Driver must confirm (or give up and cancel) before the order can
-        // proceed — see _confirmOrder/_cancelOrder for why this stage exists.
         if (_isDriver && order.status == 'ACCEPTED' && order.confirmedAt == null) ...[
           const SizedBox(height: AppSpacing.sm),
           SizedBox(
@@ -528,20 +592,25 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
 
         const SizedBox(height: AppSpacing.md),
         Center(
-          child: TextButton.icon(
-            onPressed: () async {
-              await Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (context) => FileComplaintScreen(orderId: order.id),
-                ),
-              );
-              if (!mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Complaint submitted. Our team will review it.')),
-              );
-            },
-            icon: const Icon(Icons.flag_outlined, size: 18, color: AppColors.textSecondary),
-            label: const Text('Report a problem', style: TextStyle(color: AppColors.textSecondary)),
+          child: Showcase(
+            key: _reportProblemKey,
+            description:
+                'If anything goes wrong with this order, tap here to report it.\nاگر کوئی مسئلہ ہو تو یہاں رپورٹ کریں۔',
+            child: TextButton.icon(
+              onPressed: () async {
+                await Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => FileComplaintScreen(orderId: order.id),
+                  ),
+                );
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Complaint submitted. Our team will review it.')),
+                );
+              },
+              icon: const Icon(Icons.flag_outlined, size: 18, color: AppColors.textSecondary),
+              label: const Text('Report a problem', style: TextStyle(color: AppColors.textSecondary)),
+            ),
           ),
         ),
         if (!_isDriver && order.status == 'COMPLETED' && !_hasReviewed) ...[
@@ -589,7 +658,6 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
             ),
           ),
         ],
-        // Customer's 30s cancel window after the driver confirms.
         if (!_isDriver && order.status == 'ACCEPTED' && order.confirmedAt == null) ...[
           const SizedBox(height: AppSpacing.sm),
           Text(
@@ -690,6 +758,7 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
       ),
     );
   }
+
   Widget _buildDestinationMap(Order order) {
     final destination = ll.LatLng(order.latitude, order.longitude);
     return Column(
@@ -732,7 +801,6 @@ class _ActiveOrderScreenState extends State<ActiveOrderScreen> {
       ],
     );
   }
-
 }
 
 // A 4-step horizontal progress tracker: Pending → Accepted → On the way →
