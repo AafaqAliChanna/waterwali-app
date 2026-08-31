@@ -17,7 +17,7 @@ extension TankerSizeX on TankerSize {
     }
   }
 
-  // Human-friendly label shown on the picker.
+    // Human-friendly label shown on the picker.
   String get label {
     switch (this) {
       case TankerSize.size1000L:
@@ -28,6 +28,21 @@ extension TankerSizeX on TankerSize {
         return '3000 Litres';
       case TankerSize.size5000L:
         return '5000 Litres';
+    }
+  }
+
+  // Rough US-gallon equivalent (1 litre ≈ 0.264172 gallons), for users more
+  // familiar with gallons than litres.
+  int get gallons {
+    switch (this) {
+      case TankerSize.size1000L:
+        return 264;
+      case TankerSize.size2000L:
+        return 528;
+      case TankerSize.size3000L:
+        return 793;
+      case TankerSize.size5000L:
+        return 1321;
     }
   }
 }
@@ -102,6 +117,21 @@ extension TankerSizeLabelX on String {
         return '5000L';
       default:
         return this;
+    }
+  }
+
+  int get asGallons {
+    switch (this) {
+      case 'SIZE_1000L':
+        return 264;
+      case 'SIZE_2000L':
+        return 528;
+      case 'SIZE_3000L':
+        return 793;
+      case 'SIZE_5000L':
+        return 1321;
+      default:
+        return 0;
     }
   }
 }
