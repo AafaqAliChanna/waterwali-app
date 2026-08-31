@@ -69,8 +69,17 @@ class DriverService {
         await http.post(url, headers: {'Authorization': 'Bearer $token'});
     if (response.statusCode == 200) {
       return Order.fromJson(jsonDecode(response.body));
-    } else if (response.statusCode == 409) {
-      throw Exception('Too late — another driver already accepted this order.');
+        } else if (response.statusCode == 409) {
+      // Two different reasons can cause this: another driver already took
+      // it, or this driver already has an active delivery in progress.
+      // Prefer the backend's own message when it sends one, since it
+      // knows which case actually applies.
+      String message = 'Too late — another driver already accepted this order.';
+      try {
+        final json = jsonDecode(response.body);
+        if (json is Map && json['message'] != null) message = json['message'].toString();
+      } catch (_) {}
+      throw Exception(message);
     } else if (response.statusCode == 401) {
       SessionManager.onSessionExpired?.call();
       throw Exception('Session expired. Please log in again.');
