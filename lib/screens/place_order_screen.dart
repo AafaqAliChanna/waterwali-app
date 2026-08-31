@@ -14,6 +14,8 @@ import '../services/onboarding_narrator.dart';
 import '../services/voice_guide_service.dart';
 import '../theme/app_theme.dart';
 import 'active_order_screen.dart';
+import '../models/pricing_model.dart';
+import '../services/pricing_service.dart';
 
 class PlaceOrderScreen extends StatefulWidget {
   const PlaceOrderScreen({super.key});
@@ -52,10 +54,28 @@ class _PlaceOrderScreenState extends State<PlaceOrderScreen> {
   final _placeOrderButtonKey = GlobalKey();
   bool _tourActive = false;
 
-  @override
+  final PricingService _pricingService = PricingService();
+  TankerPricing? _pricing; // null while loading, or if the fetch failed —
+                            // ordering still works fine without a preview.
+
+    @override
   void initState() {
     super.initState();
     _determinePosition();
+    _loadPricing();
+  }
+
+  Future<void> _loadPricing() async {
+    final token = Provider.of<AuthProvider>(context, listen: false).token;
+    if (token == null) return;
+    try {
+      final pricing = await _pricingService.getTodaysPricing(token);
+      if (!mounted) return;
+      setState(() => _pricing = pricing);
+    } catch (_) {
+      // Non-fatal — the price preview just won't show; the real price is
+      // still calculated and shown by the backend once the order is placed.
+    }
   }
 
   Future<void> _maybeStartTour() async {
@@ -420,6 +440,13 @@ class _PlaceOrderScreenState extends State<PlaceOrderScreen> {
                 children: [
                   Text('Tanker Size', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 16)),
                   const SizedBox(height: AppSpacing.sm),
+                                    if (_pricing?.effectiveDate != null) ...[
+                    Text(
+                      "Today's prices (${_pricing!.effectiveDate})",
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                  ],
                   Showcase(
                     key: _tankerSizeKey,
                     description:
@@ -430,11 +457,12 @@ class _PlaceOrderScreenState extends State<PlaceOrderScreen> {
                       physics: const NeverScrollableScrollPhysics(),
                       mainAxisSpacing: AppSpacing.sm,
                       crossAxisSpacing: AppSpacing.sm,
-                      childAspectRatio: 2.4,
+                      childAspectRatio: 2.0,
                       children: TankerSize.values.map((size) {
                         return _TankerSizeCard(
                           size: size,
                           selected: size == _selectedSize,
+                          todaysPrice: _pricing?.priceFor(size),
                           onTap: () => setState(() => _selectedSize = size),
                         );
                       }).toList(),
@@ -537,11 +565,13 @@ class _PlaceOrderScreenState extends State<PlaceOrderScreen> {
 class _TankerSizeCard extends StatelessWidget {
   final TankerSize size;
   final bool selected;
+  final double? todaysPrice;
   final VoidCallback onTap;
 
   const _TankerSizeCard({
     required this.size,
     required this.selected,
+    this.todaysPrice,
     required this.onTap,
   });
 
@@ -591,7 +621,7 @@ class _TankerSizeCard extends StatelessWidget {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 2),
+                                    const SizedBox(height: 2),
                   Text(
                     size.label,
                     style: TextStyle(
@@ -600,6 +630,19 @@ class _TankerSizeCard extends StatelessWidget {
                       color: selected ? AppColors.primary : AppColors.textPrimary,
                     ),
                   ),
+                  Text(
+                    '~${size.gallons} gal',
+                    style: const TextStyle(fontSize: 10, color: AppColors.textSecondary),
+                  ),
+                  if (todaysPrice != null)
+                    Text(
+                      'PKR ${todaysPrice!.toStringAsFixed(0)}',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.success,
+                      ),
+                    ),
                 ],
               ),
             ),
