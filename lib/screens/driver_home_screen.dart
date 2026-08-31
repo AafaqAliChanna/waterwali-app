@@ -42,6 +42,12 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   final Set<String> _acceptingOrderIds = {};
   String? _ordersError;
 
+  // A driver can only handle one delivery at a time — while this is
+  // non-null, nearby orders are hidden entirely and this is shown instead.
+  Order? _activeOrder;
+  int _completedCount = 0;
+  bool _isLoadingStats = true;
+
   final _walletCardKey = GlobalKey();
   final _onlineToggleKey = GlobalKey();
   final _historyIconKey = GlobalKey();
@@ -55,6 +61,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     super.initState();
     _loadWallet();
     _loadUnreadCount();
+    _loadDriverOrdersAndStats();
   }
 
   Future<void> _maybeStartTour() async {
@@ -108,6 +115,37 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     _loadUnreadCount();
   }
 
+  // Pulls the driver's own order history to find (a) any order currently
+  // ACCEPTED/IN_PROGRESS — their one allowed active delivery — and
+  // (b) a simple completed-deliveries count for the stats card.
+  Future<void> _loadDriverOrdersAndStats() async {
+    final token = _token;
+    if (token == null) return;
+    setState(() => _isLoadingStats = true);
+    try {
+      final orders = await _driverService.myOrders(token);
+      if (!mounted) return;
+      Order? active;
+      for (final order in orders) {
+        if (order.status == 'ACCEPTED' || order.status == 'IN_PROGRESS') {
+          active = order;
+          break;
+        }
+      }
+      setState(() {
+        _activeOrder = active;
+        _completedCount = orders.where((o) => o.status == 'COMPLETED').length;
+        _isLoadingStats = false;
+      });
+    } catch (_) {
+      // Non-fatal — the driver can still use the rest of the screen even
+      // if this particular fetch fails; they just won't see the active-
+      // delivery banner or stats until the next successful refresh.
+      if (!mounted) return;
+      setState(() => _isLoadingStats = false);
+    }
+  }
+
   Future<void> _loadWallet() async {
     setState(() {
       _isLoadingWallet = true;
@@ -120,9 +158,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
         _wallet = wallet;
         _isLoadingWallet = false;
       });
-      if (wallet.isOnline) _loadNearbyOrders();
-      // Tour can only start once the wallet card actually renders — wait
-      // one frame after this rebuild so the Showcase keys are attached.
+      if (wallet.isOnline && _activeOrder == null) _loadNearbyOrders();
       WidgetsBinding.instance.addPostFrameCallback((_) => _maybeStartTour());
     } catch (e) {
       if (!mounted) return;
@@ -131,6 +167,13 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
         _isLoadingWallet = false;
       });
     }
+  }
+
+  Future<void> _refreshAll() async {
+    await Future.wait([
+      _loadNearbyOrders(),
+      _loadDriverOrdersAndStats(),
+    ]);
   }
 
   Future<void> _toggleOnline(bool goOnline) async {
@@ -150,7 +193,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
         if (!isOnline) _nearbyOrders = [];
       });
 
-      if (isOnline) _loadNearbyOrders();
+      if (isOnline && _activeOrder == null) _loadNearbyOrders();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -161,6 +204,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   }
 
   Future<void> _loadNearbyOrders() async {
+    if (_activeOrder != null) return; // can't accept another anyway
     setState(() {
       _isLoadingOrders = true;
       _ordersError = null;
@@ -218,12 +262,15 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Order #${order.id} accepted!')),
       );
-      _loadNearbyOrders();
-      Navigator.of(context).push(
+      setState(() => _activeOrder = accepted);
+      await Navigator.of(context).push(
         MaterialPageRoute(
           builder: (context) => ActiveOrderScreen(orderId: accepted.id, initialOrder: accepted),
         ),
       );
+      // Refresh once the driver comes back — the order may now be
+      // completed/cancelled, freeing them up to accept a new one.
+      _loadDriverOrdersAndStats();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -403,7 +450,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
               : Stack(
                   children: [
                     RefreshIndicator(
-                      onRefresh: _loadNearbyOrders,
+                      onRefresh: _refreshAll,
                       child: ListView(
                         padding: const EdgeInsets.all(AppSpacing.md),
                         children: [
@@ -431,6 +478,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                   ],
                                 ),
                               ),
+                              if (!_isLoadingStats) _buildCompletedStatPill(),
                             ],
                           ),
                           const SizedBox(height: AppSpacing.lg),
@@ -448,7 +496,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                             child: _buildOnlineToggleCard(),
                           ),
                           const SizedBox(height: AppSpacing.lg),
-                          if (_wallet!.isOnline)
+                          if (_activeOrder != null)
+                            _buildActiveDeliveryBanner(_activeOrder!)
+                          else if (_wallet!.isOnline)
                             _buildNearbyOrdersSection()
                           else
                             _buildOfflinePrompt(),
@@ -473,6 +523,96 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                       ),
                   ],
                 ),
+    );
+  }
+
+  Widget _buildCompletedStatPill() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppColors.success.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.local_shipping, size: 14, color: AppColors.success),
+          const SizedBox(width: 4),
+          Text(
+            '$_completedCount delivered',
+            style: const TextStyle(color: AppColors.success, fontSize: 12, fontWeight: FontWeight.w700),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Shown instead of nearby orders whenever the driver already has one
+  // active delivery — they must finish it before accepting another.
+  Widget _buildActiveDeliveryBanner(Order order) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [AppColors.primary, AppColors.primaryDark],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+      ),
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 3),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(AppRadius.pill),
+                ),
+                child: Text(order.status,
+                    style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            'You have an active delivery',
+            style: TextStyle(color: Colors.white.withValues(alpha: 0.9), fontSize: 13),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            '${order.tankerSize.asTankerSizeLabel} (~${order.tankerSize.asGallons} gal) • PKR ${order.price.toStringAsFixed(0)}',
+            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Finish this delivery before new orders can appear.',
+            style: TextStyle(color: Colors.white.withValues(alpha: 0.85), fontSize: 12),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: AppColors.primary,
+              ),
+              onPressed: () async {
+                await Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) =>
+                        ActiveOrderScreen(orderId: order.id, initialOrder: order),
+                  ),
+                );
+                _loadDriverOrdersAndStats();
+              },
+              child: const Text('COMPLETE THIS DELIVERY'),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -706,7 +846,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                   ),
                                 ),
                                 const SizedBox(width: AppSpacing.sm),
-                                Text(order.tankerSize.asTankerSizeLabel),
+                                Text('${order.tankerSize.asTankerSizeLabel} (~${order.tankerSize.asGallons} gal)'),
                               ],
                             ),
                             const SizedBox(height: AppSpacing.xs),
