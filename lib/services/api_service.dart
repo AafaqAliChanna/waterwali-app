@@ -27,6 +27,7 @@ class ApiService {
     String phone,
     String password,
     String role,
+    String email,
   ) async {
     final url = Uri.parse('$baseUrl/auth/register');
     final response = await http.post(
@@ -37,14 +38,17 @@ class ApiService {
         'phone': phone,
         'password': password,
         'role': role,
+        'email': email,
       }),
     );
 
     if (response.statusCode == 200) {
       final jsonMap = jsonDecode(response.body);
       return AuthResponse.fromJson(jsonMap);
+    } else if (response.statusCode == 409) {
+      throw Exception('That phone number or email is already registered.');
     } else {
-      throw Exception('Could not create account. That phone number may already be registered.');
+      throw Exception('Could not create account. Please try again.');
     }
   }
 
@@ -94,11 +98,11 @@ class ApiService {
         await http.delete(url, headers: {'Authorization': 'Bearer $token'});
 
     if (response.statusCode != 200 && response.statusCode != 204) {
-      String message = 'Could not delete account. Please try again later.';
+            String message = 'Could not delete account. Please try again later.';
       try {
         final json = jsonDecode(response.body);
-        if (json is Map && json['message'] != null) {
-          message = json['message'].toString();
+        if (json is Map && json['error'] != null) {
+          message = json['error'].toString();
         }
       } catch (_) {
         // Response wasn't JSON — keep the generic message above.

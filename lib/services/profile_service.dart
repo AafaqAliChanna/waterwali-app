@@ -62,10 +62,10 @@ class ProfileService {
       SessionManager.onSessionExpired?.call();
       throw Exception('Session expired. Please log in again.');
     } else if (response.statusCode == 429) {
-      String message = 'You can only change your name once every 30 days.';
+            String message = 'You can only change your name once every 30 days.';
       try {
         final json = jsonDecode(response.body);
-        if (json is Map && json['message'] != null) message = json['message'].toString();
+        if (json is Map && json['error'] != null) message = json['error'].toString();
       } catch (_) {}
       throw Exception(message);
     } else {

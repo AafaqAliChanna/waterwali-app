@@ -74,10 +74,10 @@ class DriverService {
       // it, or this driver already has an active delivery in progress.
       // Prefer the backend's own message when it sends one, since it
       // knows which case actually applies.
-      String message = 'Too late — another driver already accepted this order.';
+                  String message = 'Too late — another driver already accepted this order.';
       try {
         final json = jsonDecode(response.body);
-        if (json is Map && json['message'] != null) message = json['message'].toString();
+        if (json is Map && json['error'] != null) message = json['error'].toString();
       } catch (_) {}
       throw Exception(message);
     } else if (response.statusCode == 401) {
